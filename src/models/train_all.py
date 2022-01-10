@@ -29,6 +29,8 @@ split_dict = {
     'aav_7': 'sampled',
     'meltome_mixed' : 'mixed_split',
     'meltome_mixed_short': 'mixed_split_short',
+    'meltome_mixed_short99': 'mixed_split_short99',
+    'meltome_mixed_short999': 'mixed_split_short999',
     'meltome_human' : 'human',
     'meltome_human_cell' : 'human_cell',
     'gb1_1': 'one_vs_rest',

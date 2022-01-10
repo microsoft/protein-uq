@@ -39,7 +39,7 @@ def get_data(df, max_length, encode_pad=True, zip_dataset=True, reverse_seq_targ
 def load_dataset(dataset, split, val_split = True):
     """returns dataframe of train, (val), test sets, with max_length param"""
     
-    datadir = '../splits/'+dataset+'/splits/'
+    datadir = '../../data/'+dataset+'/splits/'
 
     path = datadir+split
     print('reading dataset:', split)

@@ -1,5 +1,5 @@
 import argparse
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.linear_model import Ridge, LinearRegression, BayesianRidge
 from sklearn.preprocessing import StandardScaler
 from scipy.stats import spearmanr
@@ -134,12 +134,12 @@ def main(args, X_train_enc, y_train, y_test):
     lr.fit(X_train_enc, y_train)
     preds_mean, preds_std = lr.predict(X_test_enc, return_std=True)
     rmse = mean_squared_error(y_test, preds_mean, squared=False)
-    rho = spearmanr(y_test, preds_mean).correlation
+    mae = mean_absolute_error(y_test, preds_mean)
     residual = np.abs(y_test - preds_mean)
-    rho_unc = spearmanr(residual, preds_std).correlation 
+    rho_unc, p_rho_unc = spearmanr(residual, preds_std)
     print('TEST RMSE: ', rmse)
-    print('TEST RHO: ', rho)
     print('TEST RHO UNCERTAINTY: ', rho_unc)
+    print('TEST RHO UNCERTAINTY P-VALUE: ', p_rho_unc)
 
     df = pd.DataFrame()
     df['y_test'] = y_test
@@ -155,7 +155,7 @@ def main(args, X_train_enc, y_train, y_test):
     percent_coverage = sum(df['coverage'])/len(df)
     average_width = df['width'].mean()
     print('PERCENT COVERAGE: ', percent_coverage)
-    print('AVERAGE WIDTH: ', average_width)
+    print('AVERAGE WIDTH / TRAINING SET RANGE: ', average_width/(max(y_train)-min(y_train)))
 
     with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
         writer(f).writerow([args.dataset, 'linear', split, '', '', '', round(rho,2), round(rmse,2), '', args.alpha, round(rho_unc,2), percent_coverage, average_width])
