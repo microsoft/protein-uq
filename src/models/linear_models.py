@@ -181,7 +181,7 @@ def main(args, X_train_enc, y_train, y_test):
     lr.fit(X_train_enc, y_train)
     preds_mean, preds_std = lr.predict(X_test_enc, return_std=True)
 
-    rho = stats.spearmanr(y_test, preds_mean)
+    rho = stats.spearmanr(y_test, preds_mean).correlation
     rmse = mean_squared_error(y_test, preds_mean, squared=False)
     mae = mean_absolute_error(y_test, preds_mean)
     r2 = r2_score(y_test, preds_mean) 
@@ -206,7 +206,7 @@ def main(args, X_train_enc, y_train, y_test):
 
     rho_unc, p_rho_unc = stats.spearmanr(df['residual'], df['preds_std'])
     percent_coverage = sum(df['coverage'])/len(df)
-    average_width_range = df['width'].mean()/(max(y_train)-min(y_train))
+    average_width_range = df['width/range'].mean()/(max(y_train)-min(y_train))
     miscalibration_area_results = evaluate_miscalibration_area(df['residual'], df['preds_std']) 
     miscalibration_area = miscalibration_area_results['miscalibration_area']
     ll_results = evaluate_log_likelihood(df['residual'], df['preds_std'])
@@ -222,10 +222,15 @@ def main(args, X_train_enc, y_train, y_test):
     print('AVERAGE OPTIMAL LOG LIKELIHOOD: ', average_optimal_log_likelihood)
     print('LL / LL_OPT:', average_log_likelihood/average_optimal_log_likelihood)
 
+    metrics = [rho, rmse, mae, r2, rho_unc, p_rho_unc, percent_coverage, average_width_range, miscalibration_area, 
+               average_log_likelihood, average_optimal_log_likelihood, average_log_likelihood/average_optimal_log_likelihood]
+
+    row = [args.dataset, 'linearBayesianRidge', split]
+    for metric in metrics:
+        row.append(round(metric, 2))
+
     with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
-        writer(f).writerow([args.dataset, 'linearBayesianRidge', split, 
-                            round(rho,2), round(rmse,2), round(mae,2), round(r2,2), 
-                            round(rho_unc,2), round(p_rho_unc,2), round(percent_coverage,2), round(average_width_range,2)])
+        writer(f).writerow(row)
 
 
 if args.ensemble:
