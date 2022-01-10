@@ -1,8 +1,7 @@
 import argparse
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from sklearn.linear_model import Ridge, LinearRegression, BayesianRidge
+from sklearn.linear_model import BayesianRidge
 from sklearn.preprocessing import StandardScaler
-from scipy import stats
+
 
 import torch
 import pandas as pd
@@ -11,7 +10,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 
 from train_all import split_dict 
-from utils import SequenceDataset, load_dataset
+from utils import SequenceDataset, load_dataset, calculate_metrics
 from csv import writer
 from pathlib import Path
 
@@ -33,7 +32,6 @@ class CSVDataset(Dataset):
     def __getitem__(self, idx):
         row = self.data.iloc[idx]
         return [row['sequence'], *row[self.outputs]]
-
 
 class Tokenizer(object):
     """Convert between strings and their one-hot representations."""
@@ -121,56 +119,6 @@ if args.scale:
     X_train_enc = scaler.fit_transform(X_train_enc)
     X_test_enc = scaler.transform(X_test_enc)
 
-def evaluate_miscalibration_area(abs_error, uncertainty):
-        standard_devs = abs_error/uncertainty
-        probabilities = [2 * (stats.norm.cdf(
-            standard_dev) - 0.5) for standard_dev in standard_devs]
-        sorted_probabilities = sorted(probabilities)
-
-        fraction_under_thresholds = []
-        threshold = 0
-
-        for i in range(len(sorted_probabilities)):
-            while sorted_probabilities[i] > threshold:
-                fraction_under_thresholds.append(i/len(sorted_probabilities))
-                threshold += 0.001
-
-        # Condition used 1.0001 to catch floating point errors.
-        while threshold < 1.0001:
-            fraction_under_thresholds.append(1)
-            threshold += 0.001
-
-        thresholds = np.linspace(0, 1, num=1001)
-        miscalibration = [np.abs(
-            fraction_under_thresholds[i] - thresholds[i]) for i in range(
-                len(thresholds))]
-        miscalibration_area = 0
-        for i in range(1, 1001):
-            miscalibration_area += np.average([miscalibration[i-1],
-                                               miscalibration[i]]) * 0.001
-
-        return {'fraction_under_thresholds': fraction_under_thresholds,
-                'thresholds': thresholds,
-                'miscalibration_area': miscalibration_area}
-
-def evaluate_log_likelihood(error, uncertainty):
-        log_likelihood = 0
-        optimal_log_likelihood = 0
-
-        for err, unc in zip(error, uncertainty):
-            # Encourage small standard deviations.
-            log_likelihood -= np.log(2 * np.pi * max(0.00001, unc**2)) / 2
-            optimal_log_likelihood -= np.log(2 * np.pi * err**2) / 2
-
-            # Penalize for large error.
-            log_likelihood -= err**2/(2 * max(0.00001, unc**2))
-            optimal_log_likelihood -= 1 / 2
-
-        return {'log_likelihood': log_likelihood,
-                'optimal_log_likelihood': optimal_log_likelihood,
-                'average_log_likelihood': log_likelihood / len(error),
-                'average_optimal_log_likelihood': optimal_log_likelihood / len(error)}
-
 def main(args, X_train_enc, y_train, y_test):
 
     # print('Parameters...')
@@ -181,54 +129,13 @@ def main(args, X_train_enc, y_train, y_test):
     lr.fit(X_train_enc, y_train)
     preds_mean, preds_std = lr.predict(X_test_enc, return_std=True)
 
-    rho = stats.spearmanr(y_test, preds_mean).correlation
-    rmse = mean_squared_error(y_test, preds_mean, squared=False)
-    mae = mean_absolute_error(y_test, preds_mean)
-    r2 = r2_score(y_test, preds_mean) 
+    print('Calculating metrics...')
+    metrics = calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train)
 
-    print('TEST RHO: ', rho)
-    print('TEST RMSE: ', rmse)
-    print('TEST MAE: ', mae)
-    print('TEST R2: ', r2) 
-
-    residual = np.abs(y_test - preds_mean)
-    coverage = residual < 2*preds_std
-    width_range = 4*preds_std/(max(y_train)-min(y_train))
-
-    df = pd.DataFrame()
-    df['y_test'] = y_test
-    df['preds_mean'] = preds_mean
-    df['preds_std'] = preds_std
-    df['residual'] = residual
-    df['coverage'] = coverage
-    df['width/range'] = width_range 
-    df.to_csv(f'{Path.cwd()}/evals_new/{args.dataset}_linear_{split}_test_preds.csv', index=False)
-
-    rho_unc, p_rho_unc = stats.spearmanr(df['residual'], df['preds_std'])
-    percent_coverage = sum(df['coverage'])/len(df)
-    average_width_range = df['width/range'].mean()/(max(y_train)-min(y_train))
-    miscalibration_area_results = evaluate_miscalibration_area(df['residual'], df['preds_std']) 
-    miscalibration_area = miscalibration_area_results['miscalibration_area']
-    ll_results = evaluate_log_likelihood(df['residual'], df['preds_std'])
-    average_log_likelihood = ll_results['average_log_likelihood']
-    average_optimal_log_likelihood = ll_results['average_optimal_log_likelihood']
-
-    print('TEST RHO UNCERTAINTY: ', rho_unc)
-    print('TEST RHO UNCERTAINTY P-VALUE: ', p_rho_unc)
-    print('PERCENT COVERAGE: ', percent_coverage)
-    print('AVERAGE WIDTH / TRAINING SET RANGE: ', average_width_range)
-    print('MISCALIBRATION AREA: ', miscalibration_area)
-    print('AVERAGE LOG LIKELIHOOD: ', average_log_likelihood)
-    print('AVERAGE OPTIMAL LOG LIKELIHOOD: ', average_optimal_log_likelihood)
-    print('LL / LL_OPT:', average_log_likelihood/average_optimal_log_likelihood)
-
-    metrics = [rho, rmse, mae, r2, rho_unc, p_rho_unc, percent_coverage, average_width_range, miscalibration_area, 
-               average_log_likelihood, average_optimal_log_likelihood, average_log_likelihood/average_optimal_log_likelihood]
-
+    # Write metric results to file
     row = [args.dataset, 'linearBayesianRidge', split]
     for metric in metrics:
         row.append(round(metric, 2))
-
     with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
         writer(f).writerow(row)
 

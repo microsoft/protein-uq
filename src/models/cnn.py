@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader, Dataset
 import torch.optim as optim
 
 from train_all import split_dict 
-from utils import SequenceDataset, load_dataset
+from utils import SequenceDataset, load_dataset, calculate_metrics
 from csv import writer
 from pathlib import Path
 
@@ -281,7 +281,13 @@ def train(args):
     print('mse = %.2f' %mse)
     np.savez_compressed('%s.npz' %args.task, prediction=pre, tgt=tgt)
     with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
-        writer(f).writerow([args.dataset, 'CNN', split, '', '', '', val_rho, mse, e, args.kernel_size, args.input_size, args.dropout])
+        writer(f).writerow([args.dataset, 'CNN', split, val_rho, mse, e, args.kernel_size, args.input_size, args.dropout])
+    
+    y_train = ds_train['target']
+    y_test = tgt
+    y_test_pred = pre
+
+    return y_train, y_test, y_test_pred
 
 
 
@@ -299,14 +305,28 @@ def main():
     args = parser.parse_args()
 
     if args.ensemble:
-        for i in range(10):
+        y_test_preds = np.array([])
+        for i in range(3):
             np.random.seed(i)
             torch.manual_seed(i)
-            train(args)
+            y_train, y_test, y_test_pred = train(args)
+            y_test_preds = np.hstack((y_test_preds, y_test_pred))
+        
+        preds_mean = np.mean(y_test_preds, axis=1)
+        preds_std = np.std(y_test_preds, axis=1)
+        metrics = calculate_metrics(y_test, preds_mean, preds_std, args, args.task, y_train)
+
+        # Write metric results to file
+        row = [args.dataset, 'CNN_ensemble', args.task]
+        for metric in metrics:
+            row.append(round(metric, 2))
+        with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
+            writer(f).writerow(row)
+
     else:
         np.random.seed(10)
         torch.manual_seed(10)
-        train(args)
+        y_train, y_test, y_test_pred = train(args)
 
 if __name__ == '__main__':
     main()
