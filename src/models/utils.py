@@ -209,7 +209,7 @@ def evaluate_log_likelihood(error, uncertainty):
                 'average_log_likelihood': log_likelihood / len(error),
                 'average_optimal_log_likelihood': optimal_log_likelihood / len(error)}
 
-def calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train):
+def calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train, algorithm_type):
     rho = stats.spearmanr(y_test, preds_mean).correlation
     rmse = mean_squared_error(y_test, preds_mean, squared=False)
     mae = mean_absolute_error(y_test, preds_mean)
@@ -231,7 +231,7 @@ def calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train):
     df['residual'] = residual
     df['coverage'] = coverage
     df['width/range'] = width_range 
-    df.to_csv(f'{Path.cwd()}/evals_new/{args.dataset}_linear_{split}_test_preds.csv', index=False)
+    df.to_csv(f'{Path.cwd()}/evals_new/{args.dataset}_{algorithm_type}_{split}_test_preds.csv', index=False)
 
     rho_unc, p_rho_unc = stats.spearmanr(df['residual'], df['preds_std'])
     percent_coverage = sum(df['coverage'])/len(df)

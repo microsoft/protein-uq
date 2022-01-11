@@ -130,10 +130,11 @@ def main(args, X_train_enc, y_train, y_test):
     preds_mean, preds_std = lr.predict(X_test_enc, return_std=True)
 
     print('Calculating metrics...')
-    metrics = calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train)
+    algorithm_type = 'linearBayesianRidge'
+    metrics = calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train, algorithm_type)
 
     # Write metric results to file
-    row = [args.dataset, 'linearBayesianRidge', split]
+    row = [args.dataset, algorithm_type, split]
     for metric in metrics:
         row.append(round(metric, 2))
     with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
