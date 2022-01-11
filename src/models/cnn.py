@@ -306,11 +306,20 @@ def main():
 
     if args.ensemble:
         y_test_preds = []
-        for i in range(3):
-            np.random.seed(i)
-            torch.manual_seed(i)
-            y_train, y_test, y_test_pred = train(args)
-            y_test_preds.append(list(y_test_pred))
+        if args.dropout == 0.0:
+            algorithm_type = 'CNN_ensemble'
+            for i in range(3):
+                np.random.seed(i)
+                torch.manual_seed(i)
+                y_train, y_test, y_test_pred = train(args)
+                y_test_preds.append(list(y_test_pred))
+        else:
+            algorithm_type = 'CNN_dropout'
+            for i in range(3):
+                np.random.seed(10)
+                torch.manual_seed(10)
+                y_train, y_test, y_test_pred = train(args)
+                y_test_preds.append(list(y_test_pred))
 
         y_test_preds = np.squeeze(np.array(y_test_preds))
         y_test = np.squeeze(np.array(y_test))
@@ -318,7 +327,6 @@ def main():
 
         preds_mean = np.mean(y_test_preds, axis=0)
         preds_std = np.std(y_test_preds, axis=0)
-        algorithm_type = 'CNN_ensemble'
         metrics = calculate_metrics(y_test, preds_mean, preds_std, args, args.task, y_train, algorithm_type)
 
         # Write metric results to file
