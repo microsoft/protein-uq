@@ -21,6 +21,9 @@ from pathlib import Path
 
 AAINDEX_ALPHABET = 'ARNDCQEGHILKMFPSTWYVXU'
 
+def negative_log_likelihood(pred_targets, pred_var, targets):
+    clamped_var = torch.clamp(pred_var, min=0.00001)
+    return torch.log(clamped_var) / 2 + (pred_targets - targets)**2 / (2 * clamped_var)
 
 class Tokenizer(object):
     """Convert between strings and their one-hot representations."""
@@ -120,13 +123,17 @@ class LengthMaxPool1D(nn.Module):
 
 
 class FluorescenceModel(nn.Module):
-    def __init__(self, n_tokens, kernel_size, input_size, dropout):
+    def __init__(self, n_tokens, kernel_size, input_size, dropout, mve=False):
         super(FluorescenceModel, self).__init__()
         self.encoder = MaskedConv1d(n_tokens, input_size, kernel_size=kernel_size)
         self.embedding = LengthMaxPool1D(linear=True, in_dim=input_size, out_dim=input_size*2)
-        self.decoder = nn.Linear(input_size*2, 1)
+        if mve:
+            output_size = 2
+        else:
+            output_size = 1
+        self.decoder = nn.Linear(input_size*2, output_size)
         self.n_tokens = n_tokens
-        self.dropout = nn.Dropout(dropout) # TODO: actually add this to model
+        self.dropout = nn.Dropout(dropout)
         self.input_size = input_size
 
     def forward(self, x, mask):
@@ -153,7 +160,10 @@ def train(args):
         batch_size = 32
     tokenizer = Tokenizer(alphabet)
     print('USING OHE HOT ENCODING')
-    criterion = nn.MSELoss()
+    if args.mve:
+        criterion = negative_log_likelihood
+    else:
+        criterion = nn.MSELoss()
     model = FluorescenceModel(len(alphabet), args.kernel_size, args.input_size, args.dropout) 
     model = model.to(device)
     optimizer = optim.Adam([
@@ -187,7 +197,11 @@ def train(args):
         tgt = tgt.to(device).float()
         mask = mask.to(device).float()
         output = model(src, mask)
-        loss = criterion(output, tgt)
+        print(np.shape(output))
+        if args.mve:
+            loss = criterion(output[:,0], output[:,1], tgt)
+        else:
+            loss = criterion(output, tgt)
         if train:
             optimizer.zero_grad()
             loss.backward()
@@ -301,6 +315,7 @@ def main():
     parser.add_argument('--kernel_size', type=int, default=5)
     parser.add_argument('--input_size', type=int, default=1024)
     parser.add_argument('--dropout', type=float, default=0.0)
+    parser.add_argument('--mve', action='store_true')
 
     args = parser.parse_args()
 
