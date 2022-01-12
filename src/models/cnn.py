@@ -164,7 +164,7 @@ def train(args):
         criterion = negative_log_likelihood
     else:
         criterion = nn.MSELoss()
-    model = FluorescenceModel(len(alphabet), args.kernel_size, args.input_size, args.dropout) 
+    model = FluorescenceModel(len(alphabet), args.kernel_size, args.input_size, args.dropout, args.mve) 
     model = model.to(device)
     optimizer = optim.Adam([
         {'params': model.encoder.parameters(), 'lr': 1e-3, 'weight_decay': 0},
@@ -199,7 +199,7 @@ def train(args):
         output = model(src, mask)
         print(np.shape(output))
         if args.mve:
-            loss = criterion(output[:,0], output[:,1], tgt)
+            loss = criterion(output[:,0], output[:,1], tgt).sum()
         else:
             loss = criterion(output, tgt)
         if train:
@@ -241,6 +241,7 @@ def train(args):
                   #end='')
             
         outputs = torch.cat(outputs).numpy()
+        print(np.shape(outputs))
         tgts = torch.cat(tgts).cpu().numpy()
         if train:
             #print('\nTraining complete in ' + str(datetime.now() - chunk_time))
@@ -250,7 +251,11 @@ def train(args):
         if not train:
             #print('\nValidation complete in ' + str(datetime.now() - start_time))
             val_rho = spearmanr(tgts, outputs).correlation
-            mse = mean_squared_error(tgts, outputs)
+            if args.mve:
+                mse = np.nan
+                print('TODO: mse')
+            else:
+                mse = mean_squared_error(tgts, outputs)
 
 #             print('\nEpoch complete in ' + str(datetime.now() - start_time))
         if return_values:
