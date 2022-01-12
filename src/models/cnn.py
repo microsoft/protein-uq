@@ -235,18 +235,18 @@ def train(args):
                 nsteps = current_step + i + 1
             else:
                 nsteps = i
-            #print('\r%s Epoch %d of %d Step %d Example %d of %d loss = %.4f'
-                  #% (t, e + 1, epochs, nsteps, n_seen, n_total, np.mean(np.array(losses)),),
-                  #end='')
+            print('\r%s Epoch %d of %d Step %d Example %d of %d loss = %.4f'
+                  % (t, e + 1, epochs, nsteps, n_seen, n_total, np.mean(np.array(losses)),),
+                  end='')
         outputs = torch.cat(outputs).numpy()
         tgts = torch.cat(tgts).cpu().numpy()
         if train:
-            #print('\nTraining complete in ' + str(datetime.now() - chunk_time))
+            print('\nTraining complete in ' + str(datetime.now() - chunk_time))
             with torch.no_grad():
                 _, val_rho = epoch(model, False, current_step=nsteps)
             chunk_time = datetime.now()
         if not train:
-            #print('\nValidation complete in ' + str(datetime.now() - start_time))
+            print('\nValidation complete in ' + str(datetime.now() - start_time))
             if args.mve:
                 val_rho = spearmanr(tgts, outputs[:,0]).correlation 
                 mse = mean_squared_error(tgts, outputs[:,0])
@@ -254,7 +254,7 @@ def train(args):
                 val_rho = spearmanr(tgts, outputs).correlation
                 mse = mean_squared_error(tgts, outputs)
 
-#             print('\nEpoch complete in ' + str(datetime.now() - start_time))
+            print('\nEpoch complete in ' + str(datetime.now() - start_time))
         if return_values:
             return i, mse, val_rho, tgts, outputs
         else:
