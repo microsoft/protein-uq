@@ -19,6 +19,8 @@ from utils import SequenceDataset, load_dataset, calculate_metrics
 from csv import writer
 from pathlib import Path
 
+import pdb
+
 AAINDEX_ALPHABET = 'ARNDCQEGHILKMFPSTWYVXU'
 
 def negative_log_likelihood(pred_targets, pred_var, targets):
@@ -197,7 +199,6 @@ def train(args):
         tgt = tgt.to(device).float()
         mask = mask.to(device).float()
         output = model(src, mask)
-        print(np.shape(output))
         if args.mve:
             loss = criterion(output[:,0], output[:,1], tgt).sum()
         else:
@@ -241,8 +242,8 @@ def train(args):
                   #end='')
             
         outputs = torch.cat(outputs).numpy()
-        print(np.shape(outputs))
         tgts = torch.cat(tgts).cpu().numpy()
+        pdb.set_trace()
         if train:
             #print('\nTraining complete in ' + str(datetime.now() - chunk_time))
             with torch.no_grad():
@@ -250,11 +251,11 @@ def train(args):
             chunk_time = datetime.now()
         if not train:
             #print('\nValidation complete in ' + str(datetime.now() - start_time))
-            val_rho = spearmanr(tgts, outputs).correlation
             if args.mve:
-                mse = np.nan
-                print('TODO: mse')
+                val_rho = spearmanr(tgts, outputs[:,0]).correlation 
+                mse = mean_squared_error(tgts, outputs[:,0])
             else:
+                val_rho = spearmanr(tgts, outputs).correlation
                 mse = mean_squared_error(tgts, outputs)
 
 #             print('\nEpoch complete in ' + str(datetime.now() - start_time))
