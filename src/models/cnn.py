@@ -19,8 +19,6 @@ from utils import SequenceDataset, load_dataset, calculate_metrics
 from csv import writer
 from pathlib import Path
 
-import pdb
-
 AAINDEX_ALPHABET = 'ARNDCQEGHILKMFPSTWYVXU'
 
 def negative_log_likelihood(pred_targets, pred_var, targets):
@@ -240,10 +238,8 @@ def train(args):
             #print('\r%s Epoch %d of %d Step %d Example %d of %d loss = %.4f'
                   #% (t, e + 1, epochs, nsteps, n_seen, n_total, np.mean(np.array(losses)),),
                   #end='')
-            
         outputs = torch.cat(outputs).numpy()
         tgts = torch.cat(tgts).cpu().numpy()
-        pdb.set_trace()
         if train:
             #print('\nTraining complete in ' + str(datetime.now() - chunk_time))
             with torch.no_grad():
