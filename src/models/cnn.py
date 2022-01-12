@@ -344,6 +344,18 @@ def main():
 
         preds_mean = np.mean(y_test_preds, axis=0)
         preds_std = np.std(y_test_preds, axis=0)
+
+    else:
+        np.random.seed(10)
+        torch.manual_seed(10)
+        y_train, y_test, y_test_preds = train(args)
+
+        if args.mve:
+            algorithm_type = 'CNN_mve'
+            preds_mean = y_test_preds[:,0]
+            preds_std = np.sqrt(y_test_preds[:,1])
+
+    if args.ensemble or args.dropout or args.mve:
         metrics = calculate_metrics(y_test, preds_mean, preds_std, args, args.task, y_train, algorithm_type)
 
         # Write metric results to file
@@ -352,11 +364,6 @@ def main():
             row.append(round(metric, 2))
         with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
             writer(f).writerow(row)
-
-    else:
-        np.random.seed(10)
-        torch.manual_seed(10)
-        y_train, y_test, y_test_pred = train(args)
 
 if __name__ == '__main__':
     main()
