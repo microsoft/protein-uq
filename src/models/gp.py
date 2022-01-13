@@ -3,8 +3,7 @@ import torch
 import gpytorch
 
 import argparse
-from sklearn.linear_model import BayesianRidge
-from sklearn.preprocessing import StandardScaler
+#from sklearn.preprocessing import StandardScaler
 
 import torch
 import pandas as pd
@@ -51,6 +50,7 @@ torch.manual_seed(1)
 parser = argparse.ArgumentParser()
 parser.add_argument('dataset', type=str, help='file path to data directory')
 parser.add_argument('task', type=str)
+parser.add_argument('--scale', type=bool, default=False)
 args = parser.parse_args()
 
 AAINDEX_ALPHABET = 'ARNDCQEGHILKMFPSTWYVXU'
@@ -111,8 +111,8 @@ if args.scale:
     X_test_enc = scaler.transform(X_test_enc)
 
 
-train_x, train_y = X_train_enc, y_train
-test_x, test_y = X_test_enc, y_test
+train_x, train_y = torch.tensor(X_train_enc), torch.tensor(y_train)
+test_x, test_y = torch.tensor(X_test_enc), torch.tensor(y_test)
 
 # initialize likelihood and model
 likelihood = gpytorch.likelihoods.GaussianLikelihood()
