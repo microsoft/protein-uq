@@ -225,6 +225,9 @@ def train(args):
         tgts = []
         chunk_time = datetime.now()
         n_seen = 0
+        if args.ensemble and args.dropout and not train:
+            np.random.seed(args.dropout_seed)
+            torch.manual_seed(args.dropout_seed) 
         for i, batch in enumerate(loader):
             loss, output, tgt = step(model, batch, train)
             losses.append(loss)
@@ -261,7 +264,7 @@ def train(args):
             return i, val_rho
     nsteps = 0
     e = 0
-    bestmodel_name = 'bestmodel_'+str(args.task)+str(args.kernel_size)+'_'+str(args.input_size)+'_'+str(args.dropout)+'.tar'
+    bestmodel_name = 'bestmodel_'+str(args.algorithm_type)+'_'+str(args.task)+str(args.kernel_size)+'_'+str(args.input_size)+'_'+str(args.dropout)+'.tar'
     for e in range(epochs):
         s, val_rho = epoch(model, True, current_step=nsteps)
         #print(val_rho)
@@ -282,22 +285,22 @@ def train(args):
                 'step': nsteps,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict()
-            }, args.out_fpath + bestmodel_name)
+            }, args.out_fpath + '/' + bestmodel_name)
         else:
             p += 1 
         if p == patience:
             print('MET PATIENCE')
             break
     print('Testing...')
-    sd = torch.load(args.out_fpath + bestmodel_name)
+    sd = torch.load(args.out_fpath + '/' + bestmodel_name)
     model.load_state_dict(sd['model_state_dict'])
     dl_valid_AA = dl_test_AA
     _, mse, val_rho, tgt, pre = epoch(model, False, current_step=nsteps, return_values=True)
     print('rho = %.2f' %val_rho)
     print('mse = %.2f' %mse)
     np.savez_compressed('%s.npz' %args.task, prediction=pre, tgt=tgt)
-    with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
-        writer(f).writerow([args.dataset, 'CNN', split, val_rho, mse, e, args.kernel_size, args.input_size, args.dropout])
+    # with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
+    #     writer(f).writerow([args.dataset, 'CNN', split, val_rho, mse, e, args.kernel_size, args.input_size, args.dropout])
     
     y_train = [ds_train[i][1] for i in range(len(ds_train))]
     y_test = tgt
@@ -324,17 +327,16 @@ def main():
     if args.ensemble:
         y_test_preds = []
         if args.dropout == 0.0:
-            algorithm_type = 'CNN_ensemble'
+            args.algorithm_type = 'CNN_ensemble'
             for i in range(3):
                 np.random.seed(i)
                 torch.manual_seed(i)
                 y_train, y_test, y_test_pred = train(args)
                 y_test_preds.append(list(y_test_pred))
         else:
-            algorithm_type = 'CNN_dropout'
+            args.algorithm_type = 'CNN_dropout'
             for i in range(3):
-                np.random.seed(10)
-                torch.manual_seed(10)
+                args.dropout_seed = i
                 y_train, y_test, y_test_pred = train(args)
                 y_test_preds.append(list(y_test_pred))
 
@@ -351,15 +353,15 @@ def main():
         y_train, y_test, y_test_preds = train(args)
 
         if args.mve:
-            algorithm_type = 'CNN_mve'
+            args.algorithm_type = 'CNN_mve'
             preds_mean = y_test_preds[:,0]
             preds_std = np.sqrt(y_test_preds[:,1])
 
     if args.ensemble or args.dropout or args.mve:
-        metrics = calculate_metrics(y_test, preds_mean, preds_std, args, args.task, y_train, algorithm_type)
+        metrics = calculate_metrics(y_test, preds_mean, preds_std, args, args.task, y_train, args.algorithm_type)
 
         # Write metric results to file
-        row = [args.dataset, algorithm_type, args.task]
+        row = [args.dataset, args.algorithm_type, args.task]
         for metric in metrics:
             row.append(round(metric, 2))
         with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
