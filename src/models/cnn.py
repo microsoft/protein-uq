@@ -240,12 +240,12 @@ def train(args):
                   end='')
         outputs = torch.cat(outputs).numpy()
         tgts = torch.cat(tgts).cpu().numpy()
-        if train:
+        if train and not dropout_inference:
             print('\nTraining complete in ' + str(datetime.now() - chunk_time))
             with torch.no_grad():
                 _, val_rho = epoch(model, False, current_step=nsteps)
             chunk_time = datetime.now()
-        if not train:
+        if dropout_inference or not train:
             print('\nValidation complete in ' + str(datetime.now() - start_time))
             if args.mve:
                 val_rho = spearmanr(tgts, outputs[:,0]).correlation 
