@@ -359,6 +359,10 @@ def main():
             preds_mean = y_test_preds[:,0]
             preds_std = np.sqrt(y_test_preds[:,1])
 
+            y_test_preds = np.squeeze(np.array(y_test_preds))
+            y_test = np.squeeze(np.array(y_test))
+            y_train = np.squeeze(np.array(y_train))
+
     if args.ensemble or args.dropout or args.mve:
         metrics = calculate_metrics(y_test, preds_mean, preds_std, args, args.task, y_train, args.algorithm_type)
 
