@@ -344,7 +344,7 @@ def main():
             args.algorithm_type = 'CNN_dropout'
             np.random.seed(1)
             torch.manual_seed(1)
-            y_train, y_test, y_test_pred = train(args)
+            y_train, y_test, y_test_preds = train(args)
 
         y_test_preds = np.squeeze(np.array(y_test_preds))
         y_test = np.squeeze(np.array(y_test))
