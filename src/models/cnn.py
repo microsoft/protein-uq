@@ -224,10 +224,7 @@ def train(args):
         outputs = []
         tgts = []
         chunk_time = datetime.now()
-        n_seen = 0
-        if args.ensemble and args.dropout and not train:
-            np.random.seed(args.dropout_seed)
-            torch.manual_seed(args.dropout_seed) 
+        n_seen = 0 
         for i, batch in enumerate(loader):
             loss, output, tgt = step(model, batch, train)
             losses.append(loss)
@@ -295,17 +292,27 @@ def train(args):
     sd = torch.load(args.out_fpath + '/' + bestmodel_name)
     model.load_state_dict(sd['model_state_dict'])
     dl_valid_AA = dl_test_AA
-    _, mse, val_rho, tgt, pre = epoch(model, False, current_step=nsteps, return_values=True)
+
+    if args.ensemble and args.dropout and not train:
+        pre = []
+        for i in range(5):
+            np.random.seed(i)
+            torch.manual_seed(i)
+            _, mse, val_rho, tgt, pre_ = epoch(model, False, current_step=nsteps, return_values=True) 
+            pre.append(list(pre_))
+    else:
+        _, mse, val_rho, tgt, pre = epoch(model, False, current_step=nsteps, return_values=True)
+
+    y_train = [ds_train[i][1] for i in range(len(ds_train))]
+    y_test = tgt
+    y_test_pred = pre
+
     print('rho = %.2f' %val_rho)
     print('mse = %.2f' %mse)
     np.savez_compressed('%s.npz' %args.task, prediction=pre, tgt=tgt)
     # with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
     #     writer(f).writerow([args.dataset, 'CNN', split, val_rho, mse, e, args.kernel_size, args.input_size, args.dropout])
     
-    y_train = [ds_train[i][1] for i in range(len(ds_train))]
-    y_test = tgt
-    y_test_pred = pre
-
     return y_train, y_test, y_test_pred
 
 
@@ -328,17 +335,16 @@ def main():
         y_test_preds = []
         if args.dropout == 0.0:
             args.algorithm_type = 'CNN_ensemble'
-            for i in range(3):
+            for i in range(5):
                 np.random.seed(i)
                 torch.manual_seed(i)
                 y_train, y_test, y_test_pred = train(args)
                 y_test_preds.append(list(y_test_pred))
         else:
             args.algorithm_type = 'CNN_dropout'
-            for i in range(3):
-                args.dropout_seed = i
-                y_train, y_test, y_test_pred = train(args)
-                y_test_preds.append(list(y_test_pred))
+            np.random.seed(1)
+            torch.manual_seed(1)
+            y_train, y_test, y_test_pred = train(args)
 
         y_test_preds = np.squeeze(np.array(y_test_preds))
         y_test = np.squeeze(np.array(y_test))
@@ -351,8 +357,8 @@ def main():
         if args.mve:
             args.algorithm_type = 'CNN_mve'
 
-        np.random.seed(10)
-        torch.manual_seed(10)
+        np.random.seed(1)
+        torch.manual_seed(1)
         y_train, y_test, y_test_preds = train(args)
 
         if args.mve:
