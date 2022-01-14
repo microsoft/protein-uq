@@ -191,7 +191,7 @@ def train(args):
     dl_test_AA = DataLoader(ds_test, collate_fn=ASCollater(alphabet, tokenizer, pad=True, pad_tok=0.),
                             batch_size=batch_size, num_workers=4)
 
-    def step(model, batch, train=True):
+    def step(model, batch, train=True, dropout_inference=False):
         src, tgt, mask = batch
         src = src.to(device).float()
         tgt = tgt.to(device).float()
@@ -201,14 +201,14 @@ def train(args):
             loss = criterion(output[:,0], output[:,1], tgt).sum()
         else:
             loss = criterion(output, tgt)
-        if train:
+        if train and not dropout_inference:
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         return loss.item(), output.detach().cpu(), tgt.detach().cpu()
 
 
-    def epoch(model, train, current_step=0, return_values=False):
+    def epoch(model, train, current_step=0, return_values=False, dropout_inference=False):
         start_time = datetime.now()
         if train:
             model = model.train()
@@ -226,7 +226,7 @@ def train(args):
         chunk_time = datetime.now()
         n_seen = 0 
         for i, batch in enumerate(loader):
-            loss, output, tgt = step(model, batch, train)
+            loss, output, tgt = step(model, batch, train, dropout_inference=dropout_inference)
             losses.append(loss)
             outputs.append(output)
             tgts.append(tgt)
@@ -298,7 +298,7 @@ def train(args):
         for i in range(5):
             np.random.seed(i)
             torch.manual_seed(i)
-            _, mse, val_rho, tgt, pre_ = epoch(model, False, current_step=nsteps, return_values=True) 
+            _, mse, val_rho, tgt, pre_ = epoch(model, True, current_step=nsteps, return_values=True, dropout_inference=True) 
             pre.append(list(pre_))
     else:
         _, mse, val_rho, tgt, pre = epoch(model, False, current_step=nsteps, return_values=True)
