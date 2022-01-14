@@ -261,7 +261,7 @@ def train(args):
             return i, val_rho
     nsteps = 0
     e = 0
-    bestmodel_name = 'bestmodel_'+str(args.algorithm_type)+'_'+str(args.task)+str(args.kernel_size)+'_'+str(args.input_size)+'_'+str(args.dropout)+'.tar'
+    bestmodel_name = 'bestmodel_'+str(args.algorithm_type)+'_'+str(args.task)+'_'+str(args.kernel_size)+'_'+str(args.input_size)+'_'+str(args.dropout)+'.tar'
     for e in range(epochs):
         s, val_rho = epoch(model, True, current_step=nsteps)
         #print(val_rho)
@@ -293,7 +293,7 @@ def train(args):
     model.load_state_dict(sd['model_state_dict'])
     dl_valid_AA = dl_test_AA
 
-    if args.ensemble and args.dropout:
+    if args.ensemble and args.dropout>0.0:
         pre = []
         for i in range(5):
             np.random.seed(i)
@@ -369,7 +369,7 @@ def main():
             y_test = np.squeeze(np.array(y_test))
             y_train = np.squeeze(np.array(y_train))
 
-    if args.ensemble or args.dropout or args.mve:
+    if args.ensemble or args.mve:
         metrics = calculate_metrics(y_test, preds_mean, preds_std, args, args.task, y_train, args.algorithm_type)
 
         # Write metric results to file
