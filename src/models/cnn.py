@@ -293,7 +293,7 @@ def train(args):
     model.load_state_dict(sd['model_state_dict'])
     dl_valid_AA = dl_test_AA
 
-    if args.ensemble and args.dropout and not train:
+    if args.ensemble and args.dropout:
         pre = []
         for i in range(5):
             np.random.seed(i)
