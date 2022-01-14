@@ -348,12 +348,14 @@ def main():
         preds_std = np.std(y_test_preds, axis=0)
 
     else:
+        if args.mve:
+            args.algorithm_type = 'CNN_mve'
+
         np.random.seed(10)
         torch.manual_seed(10)
         y_train, y_test, y_test_preds = train(args)
 
         if args.mve:
-            args.algorithm_type = 'CNN_mve'
             preds_mean = y_test_preds[:,0]
             preds_std = np.sqrt(y_test_preds[:,1])
 
