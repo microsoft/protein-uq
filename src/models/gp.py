@@ -111,8 +111,8 @@ if args.scale:
     X_test_enc = scaler.transform(X_test_enc)
 
 
-train_x, train_y = torch.tensor(X_train_enc), torch.tensor(y_train)
-test_x, test_y = torch.tensor(X_test_enc), torch.tensor(y_test)
+train_x, train_y = torch.tensor(X_train_enc).float(), torch.tensor(y_train).float()
+test_x, test_y = torch.tensor(X_test_enc).float(), torch.tensor(y_test).float()
 
 # initialize likelihood and model
 likelihood = gpytorch.likelihoods.GaussianLikelihood()
@@ -182,7 +182,7 @@ test_x = test_x.cpu()
 
 print('Calculating metrics...')
 algorithm_type = 'GPcontinuous'
-metrics = calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train, algorithm_type)
+metrics = calculate_metrics(np.array(y_test), preds_mean.numpy(), preds_std.numpy(), args, split, y_train, algorithm_type)
 
 # Write metric results to file
 row = [args.dataset, algorithm_type, split]
