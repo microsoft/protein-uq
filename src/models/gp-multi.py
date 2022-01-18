@@ -246,6 +246,9 @@ model, likelihood = train_(train_x, train_y,
 model.eval()
 likelihood.eval()
 
+train_x = train_x.cpu()
+train_y = train_y.cpu()
+
 # Test points are regularly spaced along [0,1]
 # Make predictions by feeding model through likelihood
 test_x = test_x.to(output_device)
@@ -254,14 +257,13 @@ with torch.no_grad(), gpytorch.settings.fast_pred_var(), gpytorch.beta_features.
     mean = observed_pred.mean
     lower, upper = observed_pred.confidence_region() # 2 standard deviations above and below mean
 
+test_x = test_x.cpu()
+
 preds_mean = mean.cpu()
 lower = lower.cpu()
 upper = upper.cpu()
 preds_std = (upper-preds_mean)/2
 
-train_x = train_x.cpu()
-train_y = train_y.cpu()
-test_x = test_x.cpu()
     
 ##################################################################################################
 print('Calculating metrics...')
