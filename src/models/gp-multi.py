@@ -216,7 +216,6 @@ output_device = torch.device('cuda:0')
 
 train_x = train_x.to(output_device)
 train_y = train_y.to(output_device)
-test_x = test_x.to(output_device)
 
 
 ##################################################################################################
@@ -234,7 +233,7 @@ checkpoint_size = find_best_gpu_setting(train_x, train_y,
 ##################################################################################################
 # initialize likelihood and model
 likelihood = gpytorch.likelihoods.GaussianLikelihood()
-model = ExactGPModel(train_x, train_y, likelihood)
+model = ExactGPModel(train_x, train_y, likelihood, n_devices)
 
 model, likelihood = train_(train_x, train_y,
                           n_devices=n_devices, output_device=output_device,
@@ -249,7 +248,8 @@ likelihood.eval()
 
 # Test points are regularly spaced along [0,1]
 # Make predictions by feeding model through likelihood
-with torch.no_grad(), gpytorch.settings.fast_pred_var():
+test_x = test_x.to(output_device)
+with torch.no_grad(), gpytorch.settings.fast_pred_var(), gpytorch.beta_features.checkpoint_kernel(1000):
     observed_pred = likelihood(model(test_x))
     mean = observed_pred.mean
     lower, upper = observed_pred.confidence_region() # 2 standard deviations above and below mean
