@@ -73,18 +73,23 @@ def train_(train_x,
     with gpytorch.beta_features.checkpoint_kernel(checkpoint_size), \
          gpytorch.settings.max_preconditioner_size(preconditioner_size):
 
-        def closure():
-            optimizer.zero_grad()
-            output = model(train_x)
-            loss = -mll(output, train_y)
-            return loss
+        # def closure():
+        #     optimizer.zero_grad()
+        #     output = model(train_x)
+        #     loss = -mll(output, train_y)
+        #     return loss
 
-        loss = closure()
+        optimizer.zero_grad()
+        output = model(train_x)
+        loss = -mll(output, train_y)
+
+        # loss = closure()
         loss.backward()
 
         for i in range(n_training_iter):
-            options = {'closure': closure, 'current_loss': loss, 'max_ls': 10}
-            loss, _, _, _, _, _, _, fail = optimizer.step(options)
+            # options = {'closure': closure, 'current_loss': loss, 'max_ls': 10}
+            # loss, _, _, _, _, _, _, fail = optimizer.step(options)
+            optimizer.step()
 
             print('Iter %d/%d - Loss: %.3f   lengthscale: %.3f   noise: %.3f' % (
                 i + 1, n_training_iter, loss.item(),
