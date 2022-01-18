@@ -51,7 +51,7 @@ class ExactGPModel(gpytorch.models.ExactGP):
         covar_x = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
-def train(train_x,
+def train_(train_x,
           train_y,
           n_devices,
           output_device,
@@ -115,7 +115,7 @@ def find_best_gpu_setting(train_x,
         print('Number of devices: {} -- Kernel partition size: {}'.format(n_devices, checkpoint_size))
         try:
             # Try a full forward and backward pass with this setting to check memory usage
-            _, _ = train(train_x, train_y,
+            _, _ = train_(train_x, train_y,
                          n_devices=n_devices, output_device=output_device,
                          checkpoint_size=checkpoint_size,
                          preconditioner_size=preconditioner_size, n_training_iter=1)
@@ -231,7 +231,7 @@ checkpoint_size = find_best_gpu_setting(train_x, train_y,
 likelihood = gpytorch.likelihoods.GaussianLikelihood()
 model = ExactGPModel(train_x, train_y, likelihood)
 
-model, likelihood = train(train_x, train_y,
+model, likelihood = train_(train_x, train_y,
                           n_devices=n_devices, output_device=output_device,
                           checkpoint_size=10000,
                           preconditioner_size=100,
