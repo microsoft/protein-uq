@@ -1,17 +1,16 @@
-name: protein-uq
+name: protein-uq 
 channels:
   - conda-forge
   - pytorch
-  - rdkit
   - defaults
 dependencies:
   - torchaudio
-  - torchvision
-  - cudatoolkit
-  - matplotlib
   - numpy
   - seaborn
-  - scikit-learn
   - pandas
   - scipy
-prefix: /home/kpg/miniconda3/envs/protein-uq
+  - torchvision
+  - matplotlib
+  - scikit-learn
+  - cudatoolkit
+  - gpytorch
