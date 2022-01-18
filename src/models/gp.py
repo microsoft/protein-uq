@@ -123,7 +123,6 @@ train_y = train_y.cuda()
 model = model.cuda()
 likelihood = likelihood.cuda()
 
-# Find optimal model hyperparameters
 model.train()
 likelihood.train()
 
@@ -172,13 +171,6 @@ train_x = train_x.cpu()
 train_y = train_y.cpu()
 test_x = test_x.cpu()
 
-# def main(args, X_train_enc, y_train, y_test):
-
-#     # print('Parameters...')
-#     # print('Solver: %s, MaxIter: %s, Tol: %s' % (args.solver, args.max_iter, args.tol))
-
-#     print('Training...')
-    
 
 print('Calculating metrics...')
 algorithm_type = 'GPcontinuous'
