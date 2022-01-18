@@ -2,7 +2,6 @@ import math
 import torch
 import gpytorch
 
-from LBFGS import FullBatchLBFGS
 import gc
 
 import argparse
@@ -65,7 +64,8 @@ def train(train_x,
     model.train()
     likelihood.train()
 
-    optimizer = FullBatchLBFGS(model.parameters(), lr=0.1)
+    # optimizer = FullBatchLBFGS(model.parameters(), lr=0.1)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.1)
     # "Loss" for GPs - the marginal log likelihood
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
 
