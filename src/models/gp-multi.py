@@ -97,9 +97,9 @@ def train_(train_x,
                 model.likelihood.noise.item()
             ))
 
-            if fail:
-                print('Convergence reached!')
-                break
+            # if fail:
+            #     print('Convergence reached!')
+            #     break
 
     print(f"Finished training on {train_x.size(0)} data points using {n_devices} GPUs.")
     return model, likelihood
