@@ -209,7 +209,7 @@ def evaluate_log_likelihood(error, uncertainty):
                 'average_log_likelihood': log_likelihood / len(error),
                 'average_optimal_log_likelihood': optimal_log_likelihood / len(error)}
 
-def calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train, algorithm_type):
+def calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train, algorithm_type, evidential=False):
     rho = stats.spearmanr(y_test, preds_mean).correlation
     rmse = mean_squared_error(y_test, preds_mean, squared=False)
     mae = mean_absolute_error(y_test, preds_mean)
@@ -227,7 +227,7 @@ def calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train, algor
     df['preds_mean'] = preds_mean
     df['residual'] = residual
 
-    if args.evidential:
+    if evidential:
         aleatoric_unc = preds_std[:,0]
         epistemic_unc = preds_std[:,1]
         total_unc = aleatoric_unc + epistemic_unc

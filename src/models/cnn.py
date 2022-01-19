@@ -453,7 +453,7 @@ def main():
             y_train = np.squeeze(np.array(y_train))
 
     if args.ensemble or args.mve or args.evidential:
-        metrics = calculate_metrics(y_test, preds_mean, preds_std, args, args.task, y_train, args.algorithm_type)
+        metrics = calculate_metrics(y_test, preds_mean, preds_std, args, args.task, y_train, args.algorithm_type, evidential=args.evidential)
 
         # Write metric results to file
         row = [args.dataset, args.algorithm_type, args.task]
