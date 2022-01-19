@@ -238,12 +238,12 @@ def calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train, algor
             df[f'preds_std ({name})'] = preds_std
             df[f'coverage ({name})'] = coverage
             df[f'width/range ({name})'] = width_range 
-            rho_unc, p_rho_unc = stats.spearmanr(df['residual'], df['preds_std'])
-            percent_coverage = sum(df['coverage'])/len(df)
-            average_width_range = df['width/range'].mean()/(max(y_train)-min(y_train))
-            miscalibration_area_results = evaluate_miscalibration_area(df['residual'], df['preds_std']) 
+            rho_unc, p_rho_unc = stats.spearmanr(df['residual'], df['preds_std ({name})'])
+            percent_coverage = sum(df['coverage ({name})'])/len(df)
+            average_width_range = df['width/range ({name})'].mean()/(max(y_train)-min(y_train))
+            miscalibration_area_results = evaluate_miscalibration_area(df['residual'], df['preds_std ({name})']) 
             miscalibration_area = miscalibration_area_results['miscalibration_area']
-            ll_results = evaluate_log_likelihood(df['residual'], df['preds_std'])
+            ll_results = evaluate_log_likelihood(df['residual'], df['preds_std ({name})'])
             average_log_likelihood = ll_results['average_log_likelihood']
             average_optimal_log_likelihood = ll_results['average_optimal_log_likelihood']
             print(f'TEST RHO UNCERTAINTY ({name}): ', rho_unc)

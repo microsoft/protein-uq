@@ -434,7 +434,7 @@ def main():
         epistemic_unc = np.squeeze(np.array(epistemic_unc))
 
         preds_mean = y_test_preds
-        preds_std = np.hstack((np.sqrt(aleatoric_unc), np.sqrt(epistemic_unc)))
+        preds_std = np.hstack((np.sqrt(aleatoric_unc), np.sqrt(epistemic_unc))).reshape((-1,2))
 
     else:
         if args.mve:
