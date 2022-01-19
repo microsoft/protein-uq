@@ -392,6 +392,7 @@ def main():
     parser.add_argument('--dropout', type=float, default=0.0)
     parser.add_argument('--mve', action='store_true')
     parser.add_argument('--evidential', action='store_true')
+    parser.add_argument('--regularizer_coeff', type=float, default=1.0)
 
     args = parser.parse_args()
 
