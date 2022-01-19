@@ -1,16 +1,14 @@
-name: protein-uq 
+name: protein-uq
 channels:
   - conda-forge
   - pytorch
   - defaults
 dependencies:
-  - torchaudio
-  - numpy
+  - python=3.9
+  - gpytorch
   - seaborn
-  - pandas
-  - scipy
-  - torchvision
+  - numpy
   - matplotlib
   - scikit-learn
-  - cudatoolkit
-  - gpytorch
+  - scipy
+  - pandas
