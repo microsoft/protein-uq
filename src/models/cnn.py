@@ -251,11 +251,7 @@ def train(args):
         if args.mve:
             loss = criterion(output[:,0], output[:,1], tgt).sum()
         elif args.evidential:
-            lambdas = np.array([output[i][j] for j in range(len(output[i])) if j % 4== 1]) # also called nu or v 
-            alphas =  np.array([output[i][j] for j in range(len(output[i])) if j % 4== 2])
-            betas =  np.array([output[i][j] for j in range(len(output[i])) if j % 4== 3])
-            pre = np.array([output[i][j] for j in range(len(output[i])) if j % 4== 0])
-            loss = criterion(pre, lambdas, alphas, betas, tgt)
+            loss = criterion(output[:,0], output[:,1], output[:,2], output[:,3], tgt)
         else:
             loss = criterion(output, tgt)
         if train and not dropout_inference:
@@ -361,10 +357,10 @@ def train(args):
         _, mse, val_rho, tgt, pre = epoch(model, False, current_step=nsteps, return_values=True)
 
     if args.evidential:
-        lambdas = np.array([pre[i][j] for j in range(len(pre[i])) if j % 4== 1]) # also called nu or v
-        alphas =  np.array([pre[i][j] for j in range(len(pre[i])) if j % 4== 2])
-        betas =  np.array([pre[i][j] for j in range(len(pre[i])) if j % 4== 3])
-        pre = np.array([pre[i][j] for j in range(len(pre[i])) if j % 4== 0])
+        lambdas = pre[:,1] # also called nu or v
+        alphas =  pre[:,2]
+        betas =  pre[:,3]
+        pre = pre[:,0]
 
         aleatoric_unc = betas / (alphas-1)
         epistemic_unc = aleatoric_unc / lambdas
