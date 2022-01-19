@@ -221,37 +221,68 @@ def calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train, algor
     print('TEST R2: ', r2) 
 
     residual = np.abs(y_test - preds_mean)
-    coverage = residual < 2*preds_std
-    width_range = 4*preds_std/(max(y_train)-min(y_train))
 
     df = pd.DataFrame()
     df['y_test'] = y_test
     df['preds_mean'] = preds_mean
-    df['preds_std'] = preds_std
     df['residual'] = residual
-    df['coverage'] = coverage
-    df['width/range'] = width_range 
+
+    if args.evidential:
+        aleatoric_unc = preds_std[:,0]
+        epistemic_unc = preds_std[:,1]
+        total_unc = aleatoric_unc + epistemic_unc
+        metrics = [rho, rmse, mae, r2]
+        for name, preds_std in zip(['aleatoric','epistemic','total'], [aleatoric_unc, epistemic_unc, total_unc]):
+            coverage = residual < 2*preds_std
+            width_range = 4*preds_std/(max(y_train)-min(y_train))
+            df[f'preds_std ({name})'] = preds_std
+            df[f'coverage ({name})'] = coverage
+            df[f'width/range ({name})'] = width_range 
+            rho_unc, p_rho_unc = stats.spearmanr(df['residual'], df['preds_std'])
+            percent_coverage = sum(df['coverage'])/len(df)
+            average_width_range = df['width/range'].mean()/(max(y_train)-min(y_train))
+            miscalibration_area_results = evaluate_miscalibration_area(df['residual'], df['preds_std']) 
+            miscalibration_area = miscalibration_area_results['miscalibration_area']
+            ll_results = evaluate_log_likelihood(df['residual'], df['preds_std'])
+            average_log_likelihood = ll_results['average_log_likelihood']
+            average_optimal_log_likelihood = ll_results['average_optimal_log_likelihood']
+            print(f'TEST RHO UNCERTAINTY ({name}): ', rho_unc)
+            print(f'TEST RHO UNCERTAINTY P-VALUE ({name}): ', p_rho_unc)
+            print(f'PERCENT COVERAGE ({name}): ', percent_coverage)
+            print(f'AVERAGE WIDTH / TRAINING SET RANGE ({name}): ', average_width_range)
+            print(f'MISCALIBRATION AREA ({name}): ', miscalibration_area)
+            print(f'AVERAGE NLL ({name}): ', average_log_likelihood)
+            print(f'AVERAGE OPTIMAL NLL ({name}): ', average_optimal_log_likelihood)
+            print(f'NLL / NLL_OPT ({name}):', average_log_likelihood/average_optimal_log_likelihood)
+            metrics.extend([rho_unc, p_rho_unc, percent_coverage, average_width_range, miscalibration_area, 
+               average_log_likelihood, average_optimal_log_likelihood, average_log_likelihood/average_optimal_log_likelihood])
+    else:
+        coverage = residual < 2*preds_std
+        width_range = 4*preds_std/(max(y_train)-min(y_train))
+        df['preds_std'] = preds_std
+        df['coverage'] = coverage
+        df['width/range'] = width_range 
+        rho_unc, p_rho_unc = stats.spearmanr(df['residual'], df['preds_std'])
+        percent_coverage = sum(df['coverage'])/len(df)
+        average_width_range = df['width/range'].mean()/(max(y_train)-min(y_train))
+        miscalibration_area_results = evaluate_miscalibration_area(df['residual'], df['preds_std']) 
+        miscalibration_area = miscalibration_area_results['miscalibration_area']
+        ll_results = evaluate_log_likelihood(df['residual'], df['preds_std'])
+        average_log_likelihood = ll_results['average_log_likelihood']
+        average_optimal_log_likelihood = ll_results['average_optimal_log_likelihood']
+        print('TEST RHO UNCERTAINTY: ', rho_unc)
+        print('TEST RHO UNCERTAINTY P-VALUE: ', p_rho_unc)
+        print('PERCENT COVERAGE: ', percent_coverage)
+        print('AVERAGE WIDTH / TRAINING SET RANGE: ', average_width_range)
+        print('MISCALIBRATION AREA: ', miscalibration_area)
+        print('AVERAGE NLL: ', average_log_likelihood)
+        print('AVERAGE OPTIMAL NLL: ', average_optimal_log_likelihood)
+        print('NLL / NLL_OPT:', average_log_likelihood/average_optimal_log_likelihood)
+        metrics = [rho, rmse, mae, r2, rho_unc, p_rho_unc, percent_coverage, average_width_range, miscalibration_area, 
+               average_log_likelihood, average_optimal_log_likelihood, average_log_likelihood/average_optimal_log_likelihood]
+
     df.to_csv(f'{Path.cwd()}/evals_new/{args.dataset}_{algorithm_type}_{split}_test_preds.csv', index=False)
 
-    rho_unc, p_rho_unc = stats.spearmanr(df['residual'], df['preds_std'])
-    percent_coverage = sum(df['coverage'])/len(df)
-    average_width_range = df['width/range'].mean()/(max(y_train)-min(y_train))
-    miscalibration_area_results = evaluate_miscalibration_area(df['residual'], df['preds_std']) 
-    miscalibration_area = miscalibration_area_results['miscalibration_area']
-    ll_results = evaluate_log_likelihood(df['residual'], df['preds_std'])
-    average_log_likelihood = ll_results['average_log_likelihood']
-    average_optimal_log_likelihood = ll_results['average_optimal_log_likelihood']
-
-    print('TEST RHO UNCERTAINTY: ', rho_unc)
-    print('TEST RHO UNCERTAINTY P-VALUE: ', p_rho_unc)
-    print('PERCENT COVERAGE: ', percent_coverage)
-    print('AVERAGE WIDTH / TRAINING SET RANGE: ', average_width_range)
-    print('MISCALIBRATION AREA: ', miscalibration_area)
-    print('AVERAGE NLL: ', average_log_likelihood)
-    print('AVERAGE OPTIMAL NLL: ', average_optimal_log_likelihood)
-    print('NLL / NLL_OPT:', average_log_likelihood/average_optimal_log_likelihood)
-
-    metrics = [rho, rmse, mae, r2, rho_unc, p_rho_unc, percent_coverage, average_width_range, miscalibration_area, 
-               average_log_likelihood, average_optimal_log_likelihood, average_log_likelihood/average_optimal_log_likelihood]
+    
 
     return metrics

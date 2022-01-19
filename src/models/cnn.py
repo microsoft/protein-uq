@@ -1,3 +1,4 @@
+from this import d
 from typing import List, Any
 from datetime import datetime
 import argparse
@@ -5,7 +6,7 @@ from scipy.stats import spearmanr
 import pandas as pd
 from sklearn.metrics import mean_squared_error
 
-
+import functools
 
 import torch
 import numpy as np
@@ -24,6 +25,40 @@ AAINDEX_ALPHABET = 'ARNDCQEGHILKMFPSTWYVXU'
 def negative_log_likelihood(pred_targets, pred_var, targets):
     clamped_var = torch.clamp(pred_var, min=0.00001)
     return torch.log(clamped_var) / 2 + (pred_targets - targets)**2 / (2 * clamped_var)
+
+def evidential_loss(mu, v, alpha, beta, targets, lam=1, epsilon=1e-4):
+    """
+    Use Deep Evidential Regression negative log likelihood loss + evidential
+        regularizer
+
+    :mu: pred mean parameter for NIG
+    :v: pred lam parameter for NIG
+    :alpha: predicted parameter for NIG
+    :beta: Predicted parmaeter for NIG
+    :targets: Outputs to predict
+
+    :return: Loss
+    """
+    # Calculate NLL loss
+    twoBlambda = 2*beta*(1+v)
+    nll = 0.5*torch.log(np.pi/v) \
+        - alpha*torch.log(twoBlambda) \
+        + (alpha+0.5) * torch.log(v*(targets-mu)**2 + twoBlambda) \
+        + torch.lgamma(alpha) \
+        - torch.lgamma(alpha+0.5)
+
+    L_NLL = nll #torch.mean(nll, dim=-1)
+
+    # Calculate regularizer based on absolute error of prediction
+    error = torch.abs((targets - mu))
+    reg = error * (2 * v + alpha)
+    L_REG = reg #torch.mean(reg, dim=-1)
+
+    # Loss = L_NLL + L_REG
+    # TODO If we want to optimize the dual- of the objective use the line below:
+    loss = L_NLL + lam * (L_REG - epsilon)
+
+    return loss
 
 class Tokenizer(object):
     """Convert between strings and their one-hot representations."""
@@ -123,12 +158,14 @@ class LengthMaxPool1D(nn.Module):
 
 
 class FluorescenceModel(nn.Module):
-    def __init__(self, n_tokens, kernel_size, input_size, dropout, mve=False):
+    def __init__(self, n_tokens, kernel_size, input_size, dropout, mve=False, evidential=False):
         super(FluorescenceModel, self).__init__()
         self.encoder = MaskedConv1d(n_tokens, input_size, kernel_size=kernel_size)
         self.embedding = LengthMaxPool1D(linear=True, in_dim=input_size, out_dim=input_size*2)
         if mve:
             output_size = 2
+        elif evidential:
+            output_size = 4
         else:
             output_size = 1
         self.decoder = nn.Linear(input_size*2, output_size)
@@ -136,7 +173,7 @@ class FluorescenceModel(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.input_size = input_size
 
-    def forward(self, x, mask):
+    def forward(self, x, mask, evidential=False):
         # encoder
         x = F.relu(self.encoder(x, input_mask=mask.repeat(self.n_tokens, 1, 1).permute(1, 2, 0)))
         x = x * mask.repeat(self.input_size, 1, 1).permute(1, 2, 0)
@@ -145,6 +182,18 @@ class FluorescenceModel(nn.Module):
         x = self.dropout(x)
         # decoder
         output = self.decoder(x)
+
+        if evidential:
+            min_val = 1e-6
+            # Split the outputs into the four distribution parameters
+            means, loglambdas, logalphas, logbetas = torch.split(output, output.shape[1]//4, dim=1)
+            lambdas = torch.nn.Softplus()(loglambdas) + min_val
+            alphas = torch.nn.Softplus()(logalphas) + min_val + 1  # add 1 for numerical contraints of Gamma function
+            betas = torch.nn.Softplus()(logbetas) + min_val
+
+            # Return these parameters as the output of the model
+            output = torch.stack((means, lambdas, alphas, betas),
+                                    dim = 2).view(output.size())
         return output
 
 
@@ -162,9 +211,11 @@ def train(args):
     print('USING OHE HOT ENCODING')
     if args.mve:
         criterion = negative_log_likelihood
+    elif args.evidential:
+        criterion =  functools.partial(evidential_loss, lam=args.regularizer_coeff)
     else:
         criterion = nn.MSELoss()
-    model = FluorescenceModel(len(alphabet), args.kernel_size, args.input_size, args.dropout, args.mve) 
+    model = FluorescenceModel(len(alphabet), args.kernel_size, args.input_size, args.dropout, args.mve, args.evidential) 
     model = model.to(device)
     optimizer = optim.Adam([
         {'params': model.encoder.parameters(), 'lr': 1e-3, 'weight_decay': 0},
@@ -196,7 +247,7 @@ def train(args):
         src = src.to(device).float()
         tgt = tgt.to(device).float()
         mask = mask.to(device).float()
-        output = model(src, mask)
+        output = model(src, mask, args.evidential)
         if args.mve:
             loss = criterion(output[:,0], output[:,1], tgt).sum()
         else:
@@ -303,6 +354,15 @@ def train(args):
     else:
         _, mse, val_rho, tgt, pre = epoch(model, False, current_step=nsteps, return_values=True)
 
+    if args.evidential:
+        lambdas = np.array([pre[i][j] for j in range(len(pre[i])) if j % 4== 1]) # also called nu
+        alphas =  np.array([pre[i][j] for j in range(len(pre[i])) if j % 4== 2])
+        betas =  np.array([pre[i][j] for j in range(len(pre[i])) if j % 4== 3])
+        pre = np.array([pre[i][j] for j in range(len(pre[i])) if j % 4== 0])
+
+        aleatoric_unc = betas / (alphas-1)
+        epistemic_unc = aleatoric_unc / lambdas
+
     y_train = [ds_train[i][1] for i in range(len(ds_train))]
     y_test = tgt
     y_test_pred = pre
@@ -313,7 +373,10 @@ def train(args):
     # with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
     #     writer(f).writerow([args.dataset, 'CNN', split, val_rho, mse, e, args.kernel_size, args.input_size, args.dropout])
     
-    return y_train, y_test, y_test_pred
+    if args.evidential:
+        return y_train, y_test, y_test_pred, aleatoric_unc, epistemic_unc
+    else:
+        return y_train, y_test, y_test_pred
 
 
 
@@ -328,6 +391,7 @@ def main():
     parser.add_argument('--input_size', type=int, default=1024)
     parser.add_argument('--dropout', type=float, default=0.0)
     parser.add_argument('--mve', action='store_true')
+    parser.add_argument('--evidential', action='store_true')
 
     args = parser.parse_args()
 
@@ -353,6 +417,21 @@ def main():
         preds_mean = np.mean(y_test_preds, axis=0)
         preds_std = np.std(y_test_preds, axis=0)
 
+    elif args.evidential:
+        args.algorithm_type = 'CNN_evidential'
+        np.random.seed(1)
+        torch.manual_seed(1)
+        y_train, y_test, y_test_preds, aleatoric_unc, epistemic_unc = train(args)
+
+        y_test_preds = np.squeeze(np.array(y_test_preds))
+        y_test = np.squeeze(np.array(y_test))
+        y_train = np.squeeze(np.array(y_train))
+        aleatoric_unc = np.squeeze(np.array(aleatoric_unc))
+        epistemic_unc = np.squeeze(np.array(epistemic_unc))
+
+        preds_mean = y_test_preds
+        preds_std = np.hstack((np.sqrt(aleatoric_unc), np.sqrt(epistemic_unc)))
+
     else:
         if args.mve:
             args.algorithm_type = 'CNN_mve'
@@ -369,7 +448,7 @@ def main():
             y_test = np.squeeze(np.array(y_test))
             y_train = np.squeeze(np.array(y_train))
 
-    if args.ensemble or args.mve:
+    if args.ensemble or args.mve or args.evidential:
         metrics = calculate_metrics(y_test, preds_mean, preds_std, args, args.task, y_train, args.algorithm_type)
 
         # Write metric results to file
