@@ -1,3 +1,4 @@
+import pdb
 from this import d
 from typing import List, Any
 from datetime import datetime
@@ -58,7 +59,7 @@ def evidential_loss(mu, v, alpha, beta, targets, lam=1, epsilon=1e-4):
     # TODO If we want to optimize the dual- of the objective use the line below:
     loss = L_NLL + lam * (L_REG - epsilon)
 
-    return loss
+    return torch.mean(loss)
 
 class Tokenizer(object):
     """Convert between strings and their one-hot representations."""
@@ -251,7 +252,7 @@ def train(args):
         if args.mve:
             loss = criterion(output[:,0], output[:,1], tgt).sum()
         elif args.evidential:
-            loss = criterion(output[:,0], output[:,1], output[:,2], output[:,3], tgt)
+            loss = criterion(output[:,0], output[:,1], output[:,2], output[:,3], np.squeeze(tgt))
         else:
             loss = criterion(output, tgt)
         if train and not dropout_inference:
@@ -300,7 +301,7 @@ def train(args):
             chunk_time = datetime.now()
         if dropout_inference or not train:
             print('\nValidation complete in ' + str(datetime.now() - start_time))
-            if args.mve:
+            if args.mve or args.evidential:
                 val_rho = spearmanr(tgts, outputs[:,0]).correlation 
                 mse = mean_squared_error(tgts, outputs[:,0])
             else:
