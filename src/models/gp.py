@@ -1,15 +1,11 @@
-import math
-import torch
 import gpytorch
 
 import argparse
-#from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler
 
 import torch
-import pandas as pd
 import numpy as np
 import torch.nn.functional as F
-from torch.utils.data import Dataset
 
 from train_all import split_dict 
 from utils import SequenceDataset, load_dataset, calculate_metrics
@@ -34,10 +30,14 @@ class Tokenizer(object):
         return ''.join([self.t_to_a[t] for t in x])
 
 class ExactGPModel(gpytorch.models.ExactGP):
-    def __init__(self, train_x, train_y, likelihood):
+    def __init__(self, train_x, train_y, likelihood, device_ids=[0]):
         super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
         self.mean_module = gpytorch.means.ConstantMean()
         self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
+        self.covar_module = gpytorch.kernels.MultiDeviceKernel(
+            self.covar_module, device_ids=device_ids,
+            output_device=device_ids[0]
+        )
 
     def forward(self, x):
         mean_x = self.mean_module(x)
@@ -50,7 +50,10 @@ torch.manual_seed(1)
 parser = argparse.ArgumentParser()
 parser.add_argument('dataset', type=str, help='file path to data directory')
 parser.add_argument('task', type=str)
-parser.add_argument('--scale', type=bool, default=False)
+parser.add_argument('--scale', action='store_true')
+parser.add_argument('--gpu', type=int, nargs='+', default=0)
+parser.add_argument('--size', type=int, default=0)
+parser.add_argument('--length', type=float, default=1.0)
 args = parser.parse_args()
 
 AAINDEX_ALPHABET = 'ARNDCQEGHILKMFPSTWYVXU'
@@ -61,23 +64,25 @@ train, test, _ = load_dataset(args.dataset, split+'.csv', val_split=False)
 ds_train = SequenceDataset(train)
 ds_test = SequenceDataset(test)
 
-# tokenize train data
+print('Encoding...')
+# tokenize data
 all_train = list(ds_train)
 X_train = [i[0] for i in all_train]
 y_train = [i[1] for i in all_train]
-if args.dataset == 'meltome':
-    AAINDEX_ALPHABET += 'XU'
-tokenizer = Tokenizer(AAINDEX_ALPHABET) # tokenize
-X_train = [torch.tensor(tokenizer.tokenize(i)).view(-1, 1) for i in X_train]
-
-
-# tokenize test data
 all_test = list(ds_test)
 X_test = [i[0] for i in all_test]
 y_test = [i[1] for i in all_test]
-tokenizer = Tokenizer(AAINDEX_ALPHABET) # tokenize
-X_test = [torch.tensor(tokenizer.tokenize(i)).view(-1,1) for i in X_test]
 
+if args.dataset == 'aav':
+    X_train = [s[560:604] for s in X_train]
+    X_test = [s[560:604] for s in X_test]
+if args.dataset == 'meltome':
+    max_len = 1024
+    X_train = [x[:max_len] for x in X_train]
+    X_test = [x[:max_len] for x in X_test]
+tokenizer = Tokenizer(AAINDEX_ALPHABET) # tokenize
+X_train = [torch.tensor(tokenizer.tokenize(i)).view(-1, 1) for i in X_train]
+X_test = [torch.tensor(tokenizer.tokenize(i)).view(-1,1) for i in X_test]
 
 # padding
 maxlen_train = max([len(i) for i in X_train])
@@ -109,19 +114,21 @@ if args.scale:
     scaler = StandardScaler()
     X_train_enc = scaler.fit_transform(X_train_enc)
     X_test_enc = scaler.transform(X_test_enc)
-
+    y_train = scaler.fit_transform(np.array(y_train)[:, None])[:, 0]
+    y_test = scaler.transform(np.array(y_test)[:, None])[:, 0]
 
 train_x, train_y = torch.tensor(X_train_enc).float(), torch.tensor(y_train).float()
 test_x, test_y = torch.tensor(X_test_enc).float(), torch.tensor(y_test).float()
 
 # initialize likelihood and model
 likelihood = gpytorch.likelihoods.GaussianLikelihood()
-model = ExactGPModel(train_x, train_y, likelihood)
-
-train_x = train_x.cuda()
-train_y = train_y.cuda()
-model = model.cuda()
-likelihood = likelihood.cuda()
+model = ExactGPModel(train_x, train_y, likelihood, device_ids=args.gpu)
+model.covar_module.module.base_kernel.lengthscale *= args.length
+device = torch.device('cuda:%d' %args.gpu[0])
+train_x = train_x.to(device)
+train_y = train_y.to(device)
+model = model.to(device)
+likelihood = likelihood.to(device)
 
 model.train()
 likelihood.train()
@@ -131,25 +138,30 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.1)  # Includes GaussianLik
 
 # "Loss" for GPs - the marginal log likelihood
 mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
+print('Training...')
+training_iter = 5000
+prev_loss = 1e10
+with gpytorch.beta_features.checkpoint_kernel(args.size):
+    for i in range(training_iter):
+        # Zero gradients from previous iteration
+        optimizer.zero_grad()
+        # Output from model
+        output = model(train_x)
+        # Calc loss and backprop gradients
+        loss = -mll(output, train_y)
+        loss.backward()
+        print('Iter %d/%d - Loss: %.3f   lengthscale: %.3f   noise: %.3f' % (
+            i + 1, training_iter, loss.item(),
+            model.covar_module.module.base_kernel.lengthscale.item(),
+            model.likelihood.noise.item()
+        ))
+        optimizer.step()
+        if prev_loss - loss < 1e-3 and i > 25:
+            break
+        else:
+            prev_loss = loss
 
-training_iter = 50
-for i in range(training_iter):
-    # Zero gradients from previous iteration
-    optimizer.zero_grad()
-    # Output from model
-    output = model(train_x)
-    # Calc loss and backprop gradients
-    loss = -mll(output, train_y)
-    loss.backward()
-    print('Iter %d/%d - Loss: %.3f   lengthscale: %.3f   noise: %.3f' % (
-        i + 1, training_iter, loss.item(),
-        model.covar_module.base_kernel.lengthscale.item(),
-        model.likelihood.noise.item()
-    ))
-    optimizer.step()
 
-
-test_x = test_x.cuda()
 
 # Get into evaluation (predictive posterior) mode
 model.eval()
@@ -157,12 +169,11 @@ likelihood.eval()
 
 # Test points are regularly spaced along [0,1]
 # Make predictions by feeding model through likelihood
-with torch.no_grad(), gpytorch.settings.fast_pred_var():
-    observed_pred = likelihood(model(test_x))
-    mean = observed_pred.mean
+with torch.no_grad(), gpytorch.settings.fast_pred_var(), gpytorch.beta_features.checkpoint_kernel(args.size):
+    observed_pred = likelihood(model(test_x.to(device)))
+    preds_mean = observed_pred.mean.cpu()
     lower, upper = observed_pred.confidence_region() # 2 standard deviations above and below mean
 
-preds_mean = mean.cpu()
 lower = lower.cpu()
 upper = upper.cpu()
 preds_std = (upper-preds_mean)/2
