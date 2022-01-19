@@ -187,7 +187,7 @@ class FluorescenceModel(nn.Module):
             min_val = 1e-6
             # Split the outputs into the four distribution parameters
             means, loglambdas, logalphas, logbetas = torch.split(output, output.shape[1]//4, dim=1)
-            lambdas = torch.nn.Softplus()(loglambdas) + min_val
+            lambdas = torch.nn.Softplus()(loglambdas) + min_val # also called nu or v
             alphas = torch.nn.Softplus()(logalphas) + min_val + 1  # add 1 for numerical contraints of Gamma function
             betas = torch.nn.Softplus()(logbetas) + min_val
 
@@ -250,6 +250,12 @@ def train(args):
         output = model(src, mask, args.evidential)
         if args.mve:
             loss = criterion(output[:,0], output[:,1], tgt).sum()
+        elif args.evidential:
+            lambdas = np.array([output[i][j] for j in range(len(output[i])) if j % 4== 1]) # also called nu or v 
+            alphas =  np.array([output[i][j] for j in range(len(output[i])) if j % 4== 2])
+            betas =  np.array([output[i][j] for j in range(len(output[i])) if j % 4== 3])
+            pre = np.array([output[i][j] for j in range(len(output[i])) if j % 4== 0])
+            loss = criterion(pre, lambdas, alphas, betas, tgt)
         else:
             loss = criterion(output, tgt)
         if train and not dropout_inference:
@@ -355,7 +361,7 @@ def train(args):
         _, mse, val_rho, tgt, pre = epoch(model, False, current_step=nsteps, return_values=True)
 
     if args.evidential:
-        lambdas = np.array([pre[i][j] for j in range(len(pre[i])) if j % 4== 1]) # also called nu
+        lambdas = np.array([pre[i][j] for j in range(len(pre[i])) if j % 4== 1]) # also called nu or v
         alphas =  np.array([pre[i][j] for j in range(len(pre[i])) if j % 4== 2])
         betas =  np.array([pre[i][j] for j in range(len(pre[i])) if j % 4== 3])
         pre = np.array([pre[i][j] for j in range(len(pre[i])) if j % 4== 0])
