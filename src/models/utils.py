@@ -1,3 +1,4 @@
+from this import d
 import pandas as pd
 import numpy as np
 import random
@@ -118,15 +119,22 @@ def load_esm_dataset(dataset, model, split, mean, mut_mean, samples, index, flip
 
 
 class SequenceDataset(Dataset):
-    def __init__(self, data):
+    def __init__(self, data, dataset_name):
         self.data = data
+        self.dataset_name = dataset_name
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self,index):
         row = self.data.iloc[index]
-        return row['sequence'], row['target']
+        if self.dataset_name == 'aav':
+            return row['sequence'][560:604], row['target']
+        elif self.dataset_name == 'meltome':
+            max_len = 1024
+            return row['sequence'][:max_len], row['target']
+        else:
+            return row['sequence'], row['target']
 
 class ESMSequenceDataset(Dataset):
     "special dataset class just to deal with ESM tensors"

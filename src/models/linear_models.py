@@ -67,8 +67,8 @@ AAINDEX_ALPHABET = 'ARNDCQEGHILKMFPSTWYVXU'
 split = split_dict[args.task]
 train, test, _ = load_dataset(args.dataset, split+'.csv', val_split=False)
 
-ds_train = SequenceDataset(train)
-ds_test = SequenceDataset(test)
+ds_train = SequenceDataset(train, args.dataset)
+ds_test = SequenceDataset(test, args.dataset)
 
 print('Encoding...')
 # tokenize data
@@ -79,6 +79,7 @@ all_test = list(ds_test)
 X_test = [i[0] for i in all_test]
 y_test = [i[1] for i in all_test]
 
+print([len(x) for x in X_train[:10]])
 if args.dataset == 'aav':
     X_train = [s[560:604] for s in X_train]
     X_test = [s[560:604] for s in X_test]
