@@ -129,9 +129,9 @@ class SequenceDataset(Dataset):
     def __getitem__(self,index):
         row = self.data.iloc[index]
         if self.dataset_name == 'aav':
-            return row['sequence'][560:604], row['target']
+            return row['sequence'][560:604], row['target'] # only look at part of sequence that changes
         elif self.dataset_name == 'meltome':
-            max_len = 1024
+            max_len = 1024 # truncate to first 1024 characters
             return row['sequence'][:max_len], row['target']
         else:
             return row['sequence'], row['target']

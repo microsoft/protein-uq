@@ -231,9 +231,9 @@ def train(args):
     split = split_dict[args.task]
     train, val, test, _ = load_dataset(args.dataset, split+'.csv')
 
-    ds_train = SequenceDataset(train)
-    ds_valid = SequenceDataset(val)
-    ds_test = SequenceDataset(test)
+    ds_train = SequenceDataset(train, args.dataset)
+    ds_valid = SequenceDataset(val, args.dataset)
+    ds_test = SequenceDataset(test, args.dataset)
 
     # setup dataloaders
     dl_train_AA = DataLoader(ds_train, collate_fn=ASCollater(alphabet, tokenizer, pad=True, pad_tok=0.),

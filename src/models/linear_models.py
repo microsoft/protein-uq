@@ -79,14 +79,6 @@ all_test = list(ds_test)
 X_test = [i[0] for i in all_test]
 y_test = [i[1] for i in all_test]
 
-print([len(x) for x in X_train[:10]])
-if args.dataset == 'aav':
-    X_train = [s[560:604] for s in X_train]
-    X_test = [s[560:604] for s in X_test]
-if args.dataset == 'meltome':
-    max_len = 1024
-    X_train = [x[:max_len] for x in X_train]
-    X_test = [x[:max_len] for x in X_test]
 tokenizer = Tokenizer(AAINDEX_ALPHABET) # tokenize
 X_train = [torch.tensor(tokenizer.tokenize(i)).view(-1, 1) for i in X_train]
 X_test = [torch.tensor(tokenizer.tokenize(i)).view(-1,1) for i in X_test]
