@@ -53,7 +53,7 @@ class Tokenizer(object):
 parser = argparse.ArgumentParser()
 parser.add_argument('dataset', type=str, help='file path to data directory')
 parser.add_argument('task', type=str)
-parser.add_argument('--scale', type=bool, default=False)
+parser.add_argument('--scale', action='store_true')
 parser.add_argument('--solver', type=str, default='lsqr')
 parser.add_argument('--max_iter', type=float, default=1e6)
 parser.add_argument('--tol', type=float, default=1e-4)
@@ -70,23 +70,25 @@ train, test, _ = load_dataset(args.dataset, split+'.csv', val_split=False)
 ds_train = SequenceDataset(train)
 ds_test = SequenceDataset(test)
 
-# tokenize train data
+print('Encoding...')
+# tokenize data
 all_train = list(ds_train)
 X_train = [i[0] for i in all_train]
 y_train = [i[1] for i in all_train]
-if args.dataset == 'meltome':
-    AAINDEX_ALPHABET += 'XU'
-tokenizer = Tokenizer(AAINDEX_ALPHABET) # tokenize
-X_train = [torch.tensor(tokenizer.tokenize(i)).view(-1, 1) for i in X_train]
-
-
-# tokenize test data
 all_test = list(ds_test)
 X_test = [i[0] for i in all_test]
 y_test = [i[1] for i in all_test]
-tokenizer = Tokenizer(AAINDEX_ALPHABET) # tokenize
-X_test = [torch.tensor(tokenizer.tokenize(i)).view(-1,1) for i in X_test]
 
+if args.dataset == 'aav':
+    X_train = [s[560:604] for s in X_train]
+    X_test = [s[560:604] for s in X_test]
+if args.dataset == 'meltome':
+    max_len = 1024
+    X_train = [x[:max_len] for x in X_train]
+    X_test = [x[:max_len] for x in X_test]
+tokenizer = Tokenizer(AAINDEX_ALPHABET) # tokenize
+X_train = [torch.tensor(tokenizer.tokenize(i)).view(-1, 1) for i in X_train]
+X_test = [torch.tensor(tokenizer.tokenize(i)).view(-1,1) for i in X_test]
 
 # padding
 maxlen_train = max([len(i) for i in X_train])
@@ -118,6 +120,8 @@ if args.scale:
     scaler = StandardScaler()
     X_train_enc = scaler.fit_transform(X_train_enc)
     X_test_enc = scaler.transform(X_test_enc)
+    y_train = scaler.fit_transform(np.array(y_train)[:, None])[:, 0]
+    y_test = scaler.transform(np.array(y_test)[:, None])[:, 0]
 
 def main(args, X_train_enc, y_train, y_test):
 
