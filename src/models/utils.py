@@ -263,7 +263,7 @@ def calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train, algor
             print(f'AVERAGE OPTIMAL NLL ({name}): ', average_optimal_log_likelihood)
             print(f'NLL / NLL_OPT ({name}):', average_log_likelihood/average_optimal_log_likelihood)
             metrics.extend([rho_unc, p_rho_unc, percent_coverage, average_width_range, miscalibration_area, 
-               average_log_likelihood, average_optimal_log_likelihood, average_log_likelihood/average_optimal_log_likelihood])
+               average_log_likelihood, average_optimal_log_likelihood, average_log_likelihood/average_optimal_log_likelihood, args.dropout])
     else:
         coverage = residual < 2*preds_std
         width_range = 4*preds_std/(max(y_train)-min(y_train))
@@ -287,7 +287,7 @@ def calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train, algor
         print('AVERAGE OPTIMAL NLL: ', average_optimal_log_likelihood)
         print('NLL / NLL_OPT:', average_log_likelihood/average_optimal_log_likelihood)
         metrics = [rho, rmse, mae, r2, rho_unc, p_rho_unc, percent_coverage, average_width_range, miscalibration_area, 
-               average_log_likelihood, average_optimal_log_likelihood, average_log_likelihood/average_optimal_log_likelihood]
+               average_log_likelihood, average_optimal_log_likelihood, average_log_likelihood/average_optimal_log_likelihood, args.dropout]
 
     df.to_csv(f'{Path.cwd()}/evals_new/{args.dataset}_{algorithm_type}_{split}_test_preds.csv', index=False)
 

@@ -456,7 +456,7 @@ def main():
         metrics = calculate_metrics(y_test, preds_mean, preds_std, args, args.task, y_train, args.algorithm_type, evidential=args.evidential)
 
         # Write metric results to file
-        row = [args.dataset, args.algorithm_type, args.task]
+        row = [args.dataset, args.algorithm_type, split_dict[args.task]]
         for metric in metrics:
             row.append(round(metric, 2))
         with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
