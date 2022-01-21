@@ -56,6 +56,8 @@ parser.add_argument('--size', type=int, default=0)
 parser.add_argument('--length', type=float, default=1.0)
 args = parser.parse_args()
 
+args.dropout = ''
+
 AAINDEX_ALPHABET = 'ARNDCQEGHILKMFPSTWYVXU'
 # grab data
 split = split_dict[args.task]
@@ -183,6 +185,9 @@ metrics = calculate_metrics(np.array(y_test), preds_mean.numpy(), preds_std.nump
 # Write metric results to file
 row = [args.dataset, algorithm_type, split]
 for metric in metrics:
-    row.append(round(metric, 2))
+    if isinstance(metric, str):
+        row.append(metric)
+    else:
+        row.append(round(metric, 2))
 with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
     writer(f).writerow(row)

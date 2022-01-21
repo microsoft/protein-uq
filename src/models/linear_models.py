@@ -59,8 +59,9 @@ parser.add_argument('--max_iter', type=float, default=1e6)
 parser.add_argument('--tol', type=float, default=1e-4)
 parser.add_argument('--alpha', type=float, default=1.0)
 parser.add_argument('--ensemble', action='store_true')
-
 args = parser.parse_args()
+
+args.dropout = ''
 
 AAINDEX_ALPHABET = 'ARNDCQEGHILKMFPSTWYVXU'
 # grab data
@@ -133,7 +134,10 @@ def main(args, X_train_enc, y_train, y_test):
     # Write metric results to file
     row = [args.dataset, algorithm_type, split]
     for metric in metrics:
-        row.append(round(metric, 2))
+        if isinstance(metric, str):
+            row.append(metric)
+        else:
+            row.append(round(metric, 2))
     with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
         writer(f).writerow(row)
 
