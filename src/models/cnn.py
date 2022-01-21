@@ -1,4 +1,3 @@
-import pdb
 from this import d
 from typing import List, Any
 from datetime import datetime
@@ -396,8 +395,11 @@ def main():
     parser.add_argument('--mve', action='store_true', default=False)
     parser.add_argument('--evidential', action='store_true', default=False)
     parser.add_argument('--regularizer_coeff', type=float, default=1.0)
-
+    parser.add_argument('--cpu', type=int, default=1)
     args = parser.parse_args()
+
+    if args.cpu > 1:
+        torch.set_num_threads(args.cpu)
 
     if args.ensemble:
         y_test_preds = []
