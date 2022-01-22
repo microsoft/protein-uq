@@ -5,6 +5,7 @@ import argparse
 from scipy.stats import spearmanr
 import pandas as pd
 from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import StandardScaler
 
 import functools
 
@@ -230,6 +231,12 @@ def train(args):
     split = split_dict[args.task]
     train, val, test, _ = load_dataset(args.dataset, split+'.csv')
 
+    if args.scale:
+        scaler = StandardScaler()
+        train[['target']] = scaler.fit_transform(train[['target']])
+        val[['target']] = scaler.transform(val[['target']])
+        test[['target']] = scaler.transform(test[['target']])
+
     ds_train = SequenceDataset(train, args.dataset)
     ds_valid = SequenceDataset(val, args.dataset)
     ds_test = SequenceDataset(test, args.dataset)
@@ -375,6 +382,10 @@ def train(args):
     # with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
     #     writer(f).writerow([args.dataset, 'CNN', split, val_rho, mse, e, args.kernel_size, args.input_size, args.dropout])
     
+    if args.scale:
+        y_test = scaler.inverse_transform(y_test)
+        y_test_pred = scaler.inverse_transform(y_test_pred)
+
     if args.evidential:
         return y_train, y_test, y_test_pred, aleatoric_unc, epistemic_unc
     else:
@@ -396,6 +407,7 @@ def main():
     parser.add_argument('--evidential', action='store_true', default=False)
     parser.add_argument('--regularizer_coeff', type=float, default=1.0)
     parser.add_argument('--cpu', type=int, default=1)
+    parser.add_argument('--scale', action='store_true')
     args = parser.parse_args()
 
     if args.cpu > 1:
@@ -447,14 +459,15 @@ def main():
         y_train, y_test, y_test_preds = train(args)
 
         if args.mve:
-            preds_mean = y_test_preds[:,0]
-            preds_std = np.sqrt(y_test_preds[:,1])
-
             y_test_preds = np.squeeze(np.array(y_test_preds))
             y_test = np.squeeze(np.array(y_test))
             y_train = np.squeeze(np.array(y_train))
 
+            preds_mean = y_test_preds[:,0]
+            preds_std = np.sqrt(y_test_preds[:,1])
+
     if args.ensemble or args.mve or args.evidential:
+
         metrics = calculate_metrics(y_test, preds_mean, preds_std, args, args.task, y_train, args.algorithm_type, evidential=args.evidential)
 
         # Write metric results to file
