@@ -1,3 +1,4 @@
+import pdb
 from this import d
 from typing import List, Any
 from datetime import datetime
@@ -257,11 +258,12 @@ def train(args):
         mask = mask.to(device).float()
         output = model(src, mask, args.evidential)
         if args.mve:
-            loss = criterion(output[:,0], output[:,1], tgt).sum()
+            loss = criterion(output[:,0], output[:,1], np.squeeze(tgt))
         elif args.evidential:
             loss = criterion(output[:,0], output[:,1], output[:,2], output[:,3], np.squeeze(tgt))
         else:
             loss = criterion(output, tgt)
+        pdb.set_trace()
         if train and not dropout_inference:
             optimizer.zero_grad()
             loss.backward()
@@ -315,7 +317,7 @@ def train(args):
                 val_rho = spearmanr(tgts, outputs).correlation
                 mse = mean_squared_error(tgts, outputs)
 
-            print('\nEpoch complete in ' + str(datetime.now() - start_time))
+            print('Epoch complete in ' + str(datetime.now() - chunk_time) + '\n')
         if return_values:
             return i, mse, val_rho, tgts, outputs
         else:
