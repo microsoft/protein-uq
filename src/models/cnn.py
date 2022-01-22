@@ -1,4 +1,3 @@
-import pdb
 from this import d
 from typing import List, Any
 from datetime import datetime
@@ -263,7 +262,6 @@ def train(args):
             loss = criterion(output[:,0], output[:,1], output[:,2], output[:,3], np.squeeze(tgt))
         else:
             loss = criterion(output, tgt)
-        pdb.set_trace()
         if train and not dropout_inference:
             optimizer.zero_grad()
             loss.backward()
