@@ -25,7 +25,8 @@ AAINDEX_ALPHABET = 'ARNDCQEGHILKMFPSTWYVXU'
 
 def negative_log_likelihood(pred_targets, pred_var, targets):
     clamped_var = torch.clamp(pred_var, min=0.00001)
-    return torch.log(clamped_var) / 2 + (pred_targets - targets)**2 / (2 * clamped_var)
+    loss = torch.log(clamped_var) / 2 + (pred_targets - targets)**2 / (2 * clamped_var)
+    return torch.mean(loss)
 
 def evidential_loss(mu, v, alpha, beta, targets, lam=1, epsilon=1e-4):
     """
