@@ -212,7 +212,8 @@ def train(args):
     tokenizer = Tokenizer(alphabet)
     print('USING OHE HOT ENCODING')
     if args.mve:
-        criterion = negative_log_likelihood
+        # criterion = negative_log_likelihood
+        criterion = nn.MSELoss()
     elif args.evidential:
         criterion =  functools.partial(evidential_loss, lam=args.regularizer_coeff)
     else:
@@ -257,7 +258,8 @@ def train(args):
         mask = mask.to(device).float()
         output = model(src, mask, args.evidential)
         if args.mve:
-            loss = criterion(output[:,0], output[:,1], np.squeeze(tgt))
+            # loss = criterion(output[:,0], output[:,1], np.squeeze(tgt))
+            loss = criterion(output[:,0], np.squeeze(tgt))
         elif args.evidential:
             loss = criterion(output[:,0], output[:,1], output[:,2], output[:,3], np.squeeze(tgt))
         else:
