@@ -1,7 +1,7 @@
 import argparse
 from csv import writer
 from datetime import datetime
-from pathlib import Path
+import os
 from typing import Any, List
 
 import numpy as np
@@ -486,13 +486,21 @@ def train(args):
     model.load_state_dict(sd["model_state_dict"])
     dl_valid_AA = dl_test_AA
 
-    _, mse, val_rho, tgt, pre = epoch(
-        model, False, current_step=nsteps, return_values=True
-    )
+    svi_preds = []
+    for _ in range(10):
+        _, mse, val_rho, tgt, pre = epoch(
+            model, False, current_step=nsteps, return_values=True
+        )
+        svi_preds.append(pre)
+
+    svi_preds = np.array(svi_preds).squeeze()
 
     y_train = [ds_train[i][1] for i in range(len(ds_train))]
     y_test = tgt
-    y_test_pred = pre
+
+    y_test_pred = np.zeros((svi_preds.shape[1], 2))
+    y_test_pred[:, 0] = np.mean(svi_preds, axis=0)
+    y_test_pred[:, 1] = np.var(svi_preds, axis=0)
 
     print("rho = %.2f" % val_rho)
     print("mse = %.2f" % mse)
@@ -533,7 +541,7 @@ def main():
     preds_std = np.sqrt(y_test_preds[:, 1])
 
     metrics = calculate_metrics(
-        y_test,
+        y_test.squeeze(),
         preds_mean,
         preds_std,
         args,
@@ -541,6 +549,7 @@ def main():
         y_train,
         args.algorithm_type,
         evidential=False,
+        out_fpath=args.out_fpath,
     )
 
     # Write metric results to file
@@ -548,7 +557,9 @@ def main():
     for metric in metrics:
         row.append(round(metric, 2))
     with open(
-        Path.cwd() / "evals_new" / (args.dataset + "_results.csv"), "a", newline=""
+        os.path.join(args.out_fpath, "evals_new", args.dataset + "_results.csv"),
+        "a",
+        newline="",
     ) as f:
         writer(f).writerow(row)
 
