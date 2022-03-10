@@ -82,7 +82,7 @@ def load_dataset(dataset, split, val_split=True):
     if val_split is True:
         test = df[df.set == "test"]
         train = df[(df.set == "train") & (df.validation.isnull())]
-        val = df[df.validation is True]
+        val = df[df.validation == True]
 
         print("loaded train/val/test:", len(train), len(val), len(test))
         return train, val, test, max_length
