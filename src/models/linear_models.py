@@ -15,25 +15,6 @@ from csv import writer
 from pathlib import Path
 
 
-class CSVDataset(Dataset):
-    def __init__(self, fpath=None, df=None, split=None, outputs=[]):
-        if df is None:
-            self.data = pd.read_csv(fpath)
-        else:
-            self.data = df
-        if split is not None:
-            self.data = self.data[self.data["split"] == split]
-        self.outputs = outputs
-        self.data = self.data[["sequence"] + self.outputs]
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        row = self.data.iloc[idx]
-        return [row["sequence"], *row[self.outputs]]
-
-
 parser = argparse.ArgumentParser()
 parser.add_argument("dataset", type=str, help="file path to data directory")
 parser.add_argument("task", type=str)
