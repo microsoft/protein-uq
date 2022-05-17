@@ -8,10 +8,14 @@ from scipy import stats
 from scipy.optimize import minimize
 
 import matplotlib
-matplotlib.use('Agg') # REMOVE THIS LINE IF TRYING TO INTERACTIVELY SHOW PLOTS  (IN ADDTION TO SAVING)
+
+matplotlib.use(
+    "Agg"
+)  # REMOVE THIS LINE IF TRYING TO INTERACTIVELY SHOW PLOTS  (IN ADDTION TO SAVING)
 import matplotlib.pyplot as plt
 
 from chemprop.data.utils import get_task_names
+
 
 class EvaluationMethod:
     def __init__(self):
@@ -30,65 +34,68 @@ class EvaluationMethod:
 
 class Cutoffs(EvaluationMethod):
     def __init__(self):
-        self.name = 'cutoff'
+        self.name = "cutoff"
 
     def evaluate(self, data):
         cutoff = []
         rmse = []
         ideal_rmse = []
 
-        square_error = [set_['error']**2 for set_ in data['sets_by_confidence']]
-        ideal_square_error = [set_['error']**2 for set_ in data['sets_by_error']]
+        square_error = [set_["error"] ** 2 for set_ in data["sets_by_confidence"]]
+        ideal_square_error = [set_["error"] ** 2 for set_ in data["sets_by_error"]]
 
         total_square_error = np.sum(square_error)
         ideal_total_square_error = np.sum(ideal_square_error)
 
         for i in range(len(square_error)):
-            cutoff.append(data['sets_by_confidence'][i]['confidence'])
+            cutoff.append(data["sets_by_confidence"][i]["confidence"])
 
-            rmse.append(np.sqrt(total_square_error/len(square_error[i:])))
+            rmse.append(np.sqrt(total_square_error / len(square_error[i:])))
             total_square_error -= square_error[i]
 
             ideal_rmse.append(np.sqrt(ideal_total_square_error / len(square_error[i:])))
             ideal_total_square_error -= ideal_square_error[i]
 
-        return {'cutoff': cutoff, 'rmse': rmse, 'ideal_rmse': ideal_rmse}
+        return {"cutoff": cutoff, "rmse": rmse, "ideal_rmse": ideal_rmse}
 
     def _visualize(self, task, evaluation, logger, path, draw):
-        percentiles = np.linspace(0, 100, len(evaluation['rmse']))
+        percentiles = np.linspace(0, 100, len(evaluation["rmse"]))
 
-        plt.plot(percentiles, evaluation['rmse'])
-        plt.plot(percentiles, evaluation['ideal_rmse'])
+        plt.plot(percentiles, evaluation["rmse"])
+        plt.plot(percentiles, evaluation["ideal_rmse"])
 
-        plt.xlabel('Percent of Data Discarded')
-        plt.ylabel('RMSE')
-        plt.legend(['Confidence Discard', 'Ideal Discard'])
+        plt.xlabel("Percent of Data Discarded")
+        plt.ylabel("RMSE")
+        plt.legend(["Confidence Discard", "Ideal Discard"])
         plt.title(task)
 
-        plt.savefig(os.path.join(path, self.name+".pdf"))
-        if draw: plt.show()
+        plt.savefig(os.path.join(path, self.name + ".pdf"))
+        if draw:
+            plt.show()
         plt.close()
 
-        print(evaluation, file=open(os.path.join(path, self.name+".txt"),"w"))
+        print(evaluation, file=open(os.path.join(path, self.name + ".txt"), "w"))
 
 
 class Scatter(EvaluationMethod):
     def __init__(self):
-        self.name = 'scatter'
-        self.x_axis_label = 'Confidence'
-        self.y_axis_label = 'Error'
+        self.name = "scatter"
+        self.x_axis_label = "Confidence"
+        self.y_axis_label = "Error"
 
     def evaluate(self, data):
-        confidence = [self._x_filter(set_['confidence'])
-                      for set_ in data['sets_by_confidence']]
-        error = [self._y_filter(set_['error'])
-                 for set_ in data['sets_by_confidence']]
+        confidence = [
+            self._x_filter(set_["confidence"]) for set_ in data["sets_by_confidence"]
+        ]
+        error = [self._y_filter(set_["error"]) for set_ in data["sets_by_confidence"]]
 
         slope, intercept, _, _, _ = stats.linregress(confidence, error)
 
-        return {'confidence': confidence,
-                'error': error,
-                'best_fit_y': slope * np.array(confidence) + intercept}
+        return {
+            "confidence": confidence,
+            "error": error,
+            "best_fit_y": slope * np.array(confidence) + intercept,
+        }
 
     def _x_filter(self, x):
         return x
@@ -97,25 +104,26 @@ class Scatter(EvaluationMethod):
         return y
 
     def _visualize(self, task, evaluation, logger, path, draw):
-        plt.scatter(evaluation['confidence'], evaluation['error'], s=0.3)
-        plt.plot(evaluation['confidence'], evaluation['best_fit_y'])
+        plt.scatter(evaluation["confidence"], evaluation["error"], s=0.3)
+        plt.plot(evaluation["confidence"], evaluation["best_fit_y"])
 
         plt.xlabel(self.x_axis_label)
         plt.ylabel(self.y_axis_label)
         plt.title(task)
 
-        plt.savefig(os.path.join(path, self.name+".pdf"))
-        if draw: plt.show()
+        plt.savefig(os.path.join(path, self.name + ".pdf"))
+        if draw:
+            plt.show()
         plt.close()
 
-        print(evaluation, file=open(os.path.join(path, self.name+".txt"),"w"))
+        print(evaluation, file=open(os.path.join(path, self.name + ".txt"), "w"))
 
 
 class AbsScatter(Scatter):
     def __init__(self):
-        self.name = 'abs_scatter'
-        self.x_axis_label = 'Confidence'
-        self.y_axis_label = 'Absolute Value of Error'
+        self.name = "abs_scatter"
+        self.x_axis_label = "Confidence"
+        self.y_axis_label = "Absolute Value of Error"
 
     def _y_filter(self, y):
         return np.abs(y)
@@ -123,9 +131,9 @@ class AbsScatter(Scatter):
 
 class LogScatter(Scatter):
     def __init__(self):
-        self.name = 'log_scatter'
-        self.x_axis_label = 'Log Confidence'
-        self.y_axis_label = 'Log Absolute Value of Error'
+        self.name = "log_scatter"
+        self.x_axis_label = "Log Confidence"
+        self.y_axis_label = "Log Absolute Value of Error"
 
     def _x_filter(self, x):
         return np.log(x)
@@ -136,57 +144,69 @@ class LogScatter(Scatter):
 
 class Spearman(EvaluationMethod):
     def __init__(self):
-        self.name = 'spearman'
+        self.name = "spearman"
 
     def evaluate(self, data):
-        confidence = [set_['confidence']
-                      for set_ in data['sets_by_confidence']]
-        error = [set_['error']
-                 for set_ in data['sets_by_confidence']]
+        confidence = [set_["confidence"] for set_ in data["sets_by_confidence"]]
+        error = [set_["error"] for set_ in data["sets_by_confidence"]]
 
         rho, p = stats.spearmanr(confidence, np.abs(error))
 
-        return {'rho': rho, 'p': p}
+        return {"rho": rho, "p": p}
 
     def _visualize(self, task, evaluation, logger, path, draw):
-        print(evaluation, file=open(os.path.join(path, self.name+".txt"),"w"))
-        logger("{} - Spearman Rho: {}".format(task, evaluation['rho']))
-        logger("{} - Spearman p-value: {}".format(task, evaluation['p']))
+        print(evaluation, file=open(os.path.join(path, self.name + ".txt"), "w"))
+        logger("{} - Spearman Rho: {}".format(task, evaluation["rho"]))
+        logger("{} - Spearman p-value: {}".format(task, evaluation["p"]))
 
 
 class LogLikelihood(EvaluationMethod):
     def __init__(self):
-        self.name = 'log_likelihood'
+        self.name = "log_likelihood"
 
     def evaluate(self, data):
         log_likelihood = 0
         optimal_log_likelihood = 0
-        for set_ in data['sets_by_confidence']:
+        for set_ in data["sets_by_confidence"]:
             # Encourage small standard deviations.
-            log_likelihood -= np.log(2 * np.pi * max(0.00001, set_['confidence']**2)) / 2
-            optimal_log_likelihood -= np.log(2 * np.pi * set_['error']**2) / 2
+            log_likelihood -= (
+                np.log(2 * np.pi * max(0.00001, set_["confidence"] ** 2)) / 2
+            )
+            optimal_log_likelihood -= np.log(2 * np.pi * set_["error"] ** 2) / 2
 
             # Penalize for large error.
-            log_likelihood -= set_['error']**2/(2 * max(0.00001, set_['confidence']**2))
-            optimal_log_likelihood -= 1 / 2 # set_['error']**2/(2 * set_['error']**2)
+            log_likelihood -= set_["error"] ** 2 / (
+                2 * max(0.00001, set_["confidence"] ** 2)
+            )
+            optimal_log_likelihood -= 1 / 2  # set_['error']**2/(2 * set_['error']**2)
 
-        return {'log_likelihood': log_likelihood,
-                'optimal_log_likelihood': optimal_log_likelihood,
-                'average_log_likelihood': log_likelihood / len(data['sets_by_confidence']),
-                'average_optimal_log_likelihood': optimal_log_likelihood / len(data['sets_by_confidence'])}
+        return {
+            "log_likelihood": log_likelihood,
+            "optimal_log_likelihood": optimal_log_likelihood,
+            "average_log_likelihood": log_likelihood / len(data["sets_by_confidence"]),
+            "average_optimal_log_likelihood": optimal_log_likelihood
+            / len(data["sets_by_confidence"]),
+        }
 
     def _visualize(self, task, evaluation, logger, path, draw):
-        print(evaluation, file=open(os.path.join(path, self.name+".txt"),"w"))
-        logger("{} - Sum of Log Likelihoods: {}".format(task, evaluation['log_likelihood']))
+        print(evaluation, file=open(os.path.join(path, self.name + ".txt"), "w"))
+        logger(
+            "{} - Sum of Log Likelihoods: {}".format(task, evaluation["log_likelihood"])
+        )
 
 
 class CalibrationAUC(EvaluationMethod):
     def __init__(self):
-        self.name = 'calibration_auc'
+        self.name = "calibration_auc"
 
     def evaluate(self, data):
-        standard_devs = [np.abs(set_['error'])/set_['confidence'] for set_ in data['sets_by_confidence']]
-        probabilities = [2 * (stats.norm.cdf(standard_dev) - 0.5) for standard_dev in standard_devs]
+        standard_devs = [
+            np.abs(set_["error"]) / set_["confidence"]
+            for set_ in data["sets_by_confidence"]
+        ]
+        probabilities = [
+            2 * (stats.norm.cdf(standard_dev) - 0.5) for standard_dev in standard_devs
+        ]
         sorted_probabilities = sorted(probabilities)
 
         fraction_under_thresholds = []
@@ -194,7 +214,7 @@ class CalibrationAUC(EvaluationMethod):
 
         for i in range(len(sorted_probabilities)):
             while sorted_probabilities[i] > threshold:
-                fraction_under_thresholds.append(i/len(sorted_probabilities))
+                fraction_under_thresholds.append(i / len(sorted_probabilities))
                 threshold += 0.001
 
         # Condition used 1.0001 to catch floating point errors.
@@ -203,86 +223,137 @@ class CalibrationAUC(EvaluationMethod):
             threshold += 0.001
 
         thresholds = np.linspace(0, 1, num=1001)
-        miscalibration = [np.abs(fraction_under_thresholds[i] - thresholds[i]) for i in range(len(thresholds))]
+        miscalibration = [
+            np.abs(fraction_under_thresholds[i] - thresholds[i])
+            for i in range(len(thresholds))
+        ]
         miscalibration_area = 0
         for i in range(1, 1001):
-            miscalibration_area += np.average([miscalibration[i-1], miscalibration[i]]) * 0.001
+            miscalibration_area += (
+                np.average([miscalibration[i - 1], miscalibration[i]]) * 0.001
+            )
 
-
-        return {'fraction_under_thresholds': fraction_under_thresholds,
-                'thresholds': thresholds,
-                'miscalibration_area': miscalibration_area}
+        return {
+            "fraction_under_thresholds": fraction_under_thresholds,
+            "thresholds": thresholds,
+            "miscalibration_area": miscalibration_area,
+        }
 
     def _visualize(self, task, evaluation, logger, path, draw):
         # Ideal curve.
-        plt.plot(evaluation['thresholds'], evaluation['thresholds'])
+        plt.plot(evaluation["thresholds"], evaluation["thresholds"])
 
         # True curve.
-        plt.plot(evaluation['thresholds'], evaluation['fraction_under_thresholds'])
-        print(task, '-', 'Miscalibration Area', evaluation['miscalibration_area'])
+        plt.plot(evaluation["thresholds"], evaluation["fraction_under_thresholds"])
+        print(task, "-", "Miscalibration Area", evaluation["miscalibration_area"])
 
         plt.title(task)
 
-        plt.savefig(os.path.join(path, self.name+".pdf"))
-        if draw: plt.show()
+        plt.savefig(os.path.join(path, self.name + ".pdf"))
+        if draw:
+            plt.show()
         plt.close()
 
-        print(evaluation, file=open(os.path.join(path, self.name+".txt"),"w"))
+        print(evaluation, file=open(os.path.join(path, self.name + ".txt"), "w"))
 
 
 class Boxplot(EvaluationMethod):
     def __init__(self):
-        self.name = 'boxplot'
+        self.name = "boxplot"
 
     def evaluate(self, data):
         errors_by_confidence = [[] for _ in range(10)]
 
-        min_confidence = data['sets_by_confidence'][-1]['confidence']
-        max_confidence = data['sets_by_confidence'][0]['confidence']
+        min_confidence = data["sets_by_confidence"][-1]["confidence"]
+        max_confidence = data["sets_by_confidence"][0]["confidence"]
         confidence_range = max_confidence - min_confidence
 
-        for pair in data['sets_by_confidence']:
-            errors_by_confidence[min(
-                int((pair['confidence'] - min_confidence)//(confidence_range / 10)),
-                9)].append(pair['error'])
+        for pair in data["sets_by_confidence"]:
+            errors_by_confidence[
+                min(
+                    int(
+                        (pair["confidence"] - min_confidence) // (confidence_range / 10)
+                    ),
+                    9,
+                )
+            ].append(pair["error"])
 
-        return {'errors_by_confidence': errors_by_confidence,
-                'min_confidence': min_confidence,
-                'max_confidence': max_confidence,
-                'data': data}
+        return {
+            "errors_by_confidence": errors_by_confidence,
+            "min_confidence": min_confidence,
+            "max_confidence": max_confidence,
+            "data": data,
+        }
 
     def _visualize(self, task, evaluation, logger, path, draw):
-        errors_by_confidence = evaluation['errors_by_confidence']
-        x_vals = list(np.linspace(evaluation['min_confidence'],
-                                  evaluation['max_confidence'],
-                                  num=len(errors_by_confidence),
-                                  endpoint=False) + (evaluation['max_confidence'] - evaluation['min_confidence'])/(len(errors_by_confidence) * 2))
+        errors_by_confidence = evaluation["errors_by_confidence"]
+        x_vals = list(
+            np.linspace(
+                evaluation["min_confidence"],
+                evaluation["max_confidence"],
+                num=len(errors_by_confidence),
+                endpoint=False,
+            )
+            + (evaluation["max_confidence"] - evaluation["min_confidence"])
+            / (len(errors_by_confidence) * 2)
+        )
         plt.boxplot(errors_by_confidence, positions=x_vals, widths=(0.02))
 
-        names = (
-            f'{len(errors_by_confidence[i])} points' for i in range(10))
+        names = (f"{len(errors_by_confidence[i])} points" for i in range(10))
         plt.xticks(x_vals, names)
-        plt.xlim((evaluation['min_confidence'], evaluation['max_confidence']))
-        Scatter().visualize(task, evaluation['data'], logger, path, draw)
+        plt.xlim((evaluation["min_confidence"], evaluation["max_confidence"]))
+        Scatter().visualize(task, evaluation["data"], logger, path, draw)
 
 
 class ConfidenceEvaluator:
-    methods = [Cutoffs(), AbsScatter(), LogScatter(), Spearman(), LogLikelihood(), Boxplot(), CalibrationAUC()]
+    methods = [
+        Cutoffs(),
+        AbsScatter(),
+        LogScatter(),
+        Spearman(),
+        LogLikelihood(),
+        Boxplot(),
+        CalibrationAUC(),
+    ]
 
     @staticmethod
-    def save(val_predictions, val_targets, val_confidence, val_stds, val_smiles,
-             test_predictions, test_targets, test_confidence, test_stds, test_smiles,
-             val_entropy, test_entropy, args):
+    def save(
+        val_predictions,
+        val_targets,
+        val_confidence,
+        val_stds,
+        val_smiles,
+        test_predictions,
+        test_targets,
+        test_confidence,
+        test_stds,
+        test_smiles,
+        val_entropy,
+        test_entropy,
+        args,
+    ):
 
-        f = open(args.save_confidence, 'w+')
-        val_data = ConfidenceEvaluator._log(val_predictions, val_targets,
-                                            val_confidence, val_stds, val_smiles,
-                                            val_entropy, args)
-        test_data = ConfidenceEvaluator._log(test_predictions, test_targets,
-                                             test_confidence, test_stds, test_smiles,
-                                             test_entropy, args)
+        f = open(args.save_confidence, "w+")
+        val_data = ConfidenceEvaluator._log(
+            val_predictions,
+            val_targets,
+            val_confidence,
+            val_stds,
+            val_smiles,
+            val_entropy,
+            args,
+        )
+        test_data = ConfidenceEvaluator._log(
+            test_predictions,
+            test_targets,
+            test_confidence,
+            test_stds,
+            test_smiles,
+            test_entropy,
+            args,
+        )
 
-        json.dump({'validation': val_data, 'test': test_data}, f)
+        json.dump({"validation": val_data, "test": test_data}, f)
         f.close()
 
     @staticmethod
@@ -308,16 +379,20 @@ class ConfidenceEvaluator:
             task_error = list(task_predictions - task_targets)
 
             # Extract smiles for this task
-            task_smiles = np.extract(mask,smiles)
+            task_smiles = np.extract(mask, smiles)
 
-            task_set_names = ["prediction", "target", "confidence", "stds",
-                              "error"]
-            task_data = (task_predictions, task_targets,
-                         task_confidence, task_stds, task_error, )
+            task_set_names = ["prediction", "target", "confidence", "stds", "error"]
+            task_data = (
+                task_predictions,
+                task_targets,
+                task_confidence,
+                task_stds,
+                task_error,
+            )
 
             if not args.no_smiles_export:
                 # Extract smiles for this task
-                task_smiles = np.extract(mask,smiles)
+                task_smiles = np.extract(mask, smiles)
                 task_set_names.append("smiles")
                 task_data = task_data + (task_smiles,)
 
@@ -326,31 +401,34 @@ class ConfidenceEvaluator:
                 task_set_names.append("entropy")
                 task_data = task_data + (task_entropy,)
 
-            task_sets = [dict(zip(task_set_names, task_set)) for task_set in zip(*task_data)]
+            task_sets = [
+                dict(zip(task_set_names, task_set)) for task_set in zip(*task_data)
+            ]
 
-            sets_by_confidence = sorted(task_sets,
-                                        key=lambda pair: pair['confidence'],
-                                        reverse=True)
-            sets_by_error = sorted(task_sets,
-                                   key=lambda pair: np.abs(pair['error']),
-                                   reverse=True)
+            sets_by_confidence = sorted(
+                task_sets, key=lambda pair: pair["confidence"], reverse=True
+            )
+            sets_by_error = sorted(
+                task_sets, key=lambda pair: np.abs(pair["error"]), reverse=True
+            )
 
             log[task_names[task]] = {
-                'sets_by_confidence': sets_by_confidence,
-                'sets_by_error': sets_by_error}
+                "sets_by_confidence": sets_by_confidence,
+                "sets_by_error": sets_by_error,
+            }
 
             if args.use_entropy:
-                sets_by_entropy = sorted(task_sets,
-                                       key=lambda pair: np.abs(pair['entropy']),
-                                       reverse=True)
-                log[task_names[task]]['sets_by_entropy'] = sets_by_entropy
+                sets_by_entropy = sorted(
+                    task_sets, key=lambda pair: np.abs(pair["entropy"]), reverse=True
+                )
+                log[task_names[task]]["sets_by_entropy"] = sets_by_entropy
 
         return log
 
     @staticmethod
     def visualize(file_path, methods, logger, save_dir, draw):
         f = open(file_path)
-        log = json.load(f)['test']
+        log = json.load(f)["test"]
 
         for task, data in log.items():
             for method in ConfidenceEvaluator.methods:
@@ -362,7 +440,7 @@ class ConfidenceEvaluator:
     @staticmethod
     def evaluate(file_path, methods):
         f = open(file_path)
-        log = json.load(f)['test']
+        log = json.load(f)["test"]
 
         all_evaluations = {}
         for task, data in log.items():
@@ -383,27 +461,29 @@ class ConfidenceEvaluator:
             pred_vars = np.zeros(len(confidence))
 
             for i in range(len(beta)):
-                pred_vars += np.abs(beta[i]) * lambdas[i](confidence**2)
+                pred_vars += np.abs(beta[i]) * lambdas[i](confidence ** 2)
             pred_vars = np.clip(pred_vars, 0.001, None)
-            costs = np.log(pred_vars) / 2 + errors**2 / (2 * pred_vars)
+            costs = np.log(pred_vars) / 2 + errors ** 2 / (2 * pred_vars)
 
-            return(np.sum(costs))
+            return np.sum(costs)
 
         def calibrate_sets(sets, sigmas, lambdas):
             calibrated_sets = []
             for set_ in sets:
                 calibrated_set = set_.copy()
-                calibrated_set['confidence'] = 0
+                calibrated_set["confidence"] = 0
 
                 for i in range(len(sigmas)):
-                    calibrated_set['confidence'] += sigmas[i] * lambdas[i](set_['confidence']**2)
+                    calibrated_set["confidence"] += sigmas[i] * lambdas[i](
+                        set_["confidence"] ** 2
+                    )
                 calibrated_sets.append(calibrated_set)
             return calibrated_sets
 
         f = open(file_path)
         full_log = json.load(f)
-        val_log = full_log['validation']
-        test_log = full_log['test']
+        val_log = full_log["validation"]
+        test_log = full_log["test"]
 
         scaled_val_log = {}
         scaled_test_log = {}
@@ -411,30 +491,47 @@ class ConfidenceEvaluator:
         calibration_coefficients = {}
         for task in val_log:
             # Sample from validation data.
-            sampled_data = val_log[task]['sets_by_error']
+            sampled_data = val_log[task]["sets_by_error"]
 
             # Calibrate based on sampled data.
-            confidence = np.array([set_['confidence'] for set_ in sampled_data])
-            errors = np.array([set_['error'] for set_ in sampled_data])
+            confidence = np.array([set_["confidence"] for set_ in sampled_data])
+            errors = np.array([set_["error"] for set_ in sampled_data])
 
-            result = minimize(objective_function, beta_init, args=(confidence, errors, lambdas),
-                            method='BFGS', options={'maxiter': 500})
+            result = minimize(
+                objective_function,
+                beta_init,
+                args=(confidence, errors, lambdas),
+                method="BFGS",
+                options={"maxiter": 500},
+            )
 
             calibration_coefficients[task] = np.abs(result.x)
 
             scaled_val_data = {}
-            scaled_val_data['sets_by_error'] = calibrate_sets(val_log[task]['sets_by_error'], np.abs(result.x), lambdas)
-            scaled_val_data['sets_by_confidence'] = calibrate_sets(val_log[task]['sets_by_confidence'], np.abs(result.x), lambdas)
+            scaled_val_data["sets_by_error"] = calibrate_sets(
+                val_log[task]["sets_by_error"], np.abs(result.x), lambdas
+            )
+            scaled_val_data["sets_by_confidence"] = calibrate_sets(
+                val_log[task]["sets_by_confidence"], np.abs(result.x), lambdas
+            )
             scaled_val_log[task] = scaled_val_data
 
             scaled_test_data = {}
-            scaled_test_data['sets_by_error'] = calibrate_sets(test_log[task]['sets_by_error'], np.abs(result.x), lambdas)
-            scaled_test_data['sets_by_confidence'] = calibrate_sets(test_log[task]['sets_by_confidence'], np.abs(result.x), lambdas)
+            scaled_test_data["sets_by_error"] = calibrate_sets(
+                test_log[task]["sets_by_error"], np.abs(result.x), lambdas
+            )
+            scaled_test_data["sets_by_confidence"] = calibrate_sets(
+                test_log[task]["sets_by_confidence"], np.abs(result.x), lambdas
+            )
             scaled_test_log[task] = scaled_test_data
 
         f.close()
 
-        return {'validation': scaled_val_log, 'test': scaled_test_log}, calibration_coefficients
+        return {
+            "validation": scaled_val_log,
+            "test": scaled_test_log,
+        }, calibration_coefficients
+
 
 # OUTDATED VISUALIZATIONS
 # def confidence_visualizations(args: Namespace,

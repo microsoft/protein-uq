@@ -1,192 +1,25 @@
-from typing import List, Any
-from datetime import datetime
 import argparse
+import functools
+from csv import writer
+from datetime import datetime
+from pathlib import Path
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 from scipy.stats import spearmanr
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import StandardScaler
-
-import functools
-
-import torch
-import numpy as np
-import torch.nn as nn
-import torch.nn.functional as F
-
 from torch.utils.data import DataLoader
-import torch.optim as optim
 
+from models import LengthMaxPool1D, MaskedConv1d
 from train_all import split_dict
-from utils import SequenceDataset, load_dataset, calculate_metrics
-from csv import writer
-from pathlib import Path
+from utils import (ASCollater, SequenceDataset, Tokenizer, calculate_metrics,
+                   evidential_loss, load_dataset, negative_log_likelihood)
 
 AAINDEX_ALPHABET = "ARNDCQEGHILKMFPSTWYVXU"
-
-
-def negative_log_likelihood(pred_targets, pred_var, targets):
-    clamped_var = torch.clamp(pred_var, min=0.00001)
-    loss = torch.log(clamped_var) / 2 + (pred_targets - targets) ** 2 / (
-        2 * clamped_var
-    )
-    return torch.mean(loss)
-
-
-def evidential_loss(mu, v, alpha, beta, targets, lam=1, epsilon=1e-4):
-    """
-    Use Deep Evidential Regression negative log likelihood loss + evidential
-        regularizer
-
-    :mu: pred mean parameter for NIG
-    :v: pred lam parameter for NIG
-    :alpha: predicted parameter for NIG
-    :beta: Predicted parmaeter for NIG
-    :targets: Outputs to predict
-
-    :return: Loss
-    """
-    # Calculate NLL loss
-    twoBlambda = 2 * beta * (1 + v)
-    nll = (
-        0.5 * torch.log(np.pi / v)
-        - alpha * torch.log(twoBlambda)
-        + (alpha + 0.5) * torch.log(v * (targets - mu) ** 2 + twoBlambda)
-        + torch.lgamma(alpha)
-        - torch.lgamma(alpha + 0.5)
-    )
-
-    L_NLL = nll  # torch.mean(nll, dim=-1)
-
-    # Calculate regularizer based on absolute error of prediction
-    error = torch.abs((targets - mu))
-    reg = error * (2 * v + alpha)
-    L_REG = reg  # torch.mean(reg, dim=-1)
-
-    # Loss = L_NLL + L_REG
-    # TODO If we want to optimize the dual- of the objective use the line below:
-    loss = L_NLL + lam * (L_REG - epsilon)
-
-    return torch.mean(loss)
-
-
-class Tokenizer(object):
-    """Convert between strings and their one-hot representations."""
-
-    def __init__(self, alphabet: str):
-        self.alphabet = alphabet
-        self.a_to_t = {a: i for i, a in enumerate(self.alphabet)}
-        self.t_to_a = {i: a for i, a in enumerate(self.alphabet)}
-
-    @property
-    def vocab_size(self) -> int:
-        return len(self.alphabet)
-
-    def tokenize(self, seq: str) -> np.ndarray:
-        return np.array([self.a_to_t[a] for a in seq])
-
-    def untokenize(self, x) -> str:
-        return "".join([self.t_to_a[t] for t in x])
-
-
-class MaskedConv1d(nn.Conv1d):
-    """A masked 1-dimensional convolution layer.
-
-    Takes the same arguments as torch.nn.Conv1D, except that the padding is set automatically.
-
-         Shape:
-            Input: (N, L, in_channels)
-            input_mask: (N, L, 1), optional
-            Output: (N, L, out_channels)
-    """
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        stride: int = 1,
-        dilation: int = 1,
-        groups: int = 1,
-        bias: bool = True,
-    ):
-        """
-        :param in_channels: input channels
-        :param out_channels: output channels
-        :param kernel_size: the kernel width
-        :param stride: filter shift
-        :param dilation: dilation factor
-        :param groups: perform depth-wise convolutions
-        :param bias: adds learnable bias to output
-        """
-        padding = dilation * (kernel_size - 1) // 2
-        super().__init__(
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride=stride,
-            dilation=dilation,
-            groups=groups,
-            bias=bias,
-            padding=padding,
-        )
-
-    def forward(self, x, input_mask=None):
-        if input_mask is not None:
-            x = x * input_mask
-        return super().forward(x.transpose(1, 2)).transpose(1, 2)
-
-
-class ASCollater(object):
-    def __init__(
-        self, alphabet: str, tokenizer: object, pad=False, pad_tok=0.0, backwards=False
-    ):
-        self.pad = pad
-        self.pad_tok = pad_tok
-        self.tokenizer = tokenizer
-        self.backwards = backwards
-        self.alphabet = alphabet
-
-    def __call__(
-        self,
-        batch: List[Any],
-    ) -> List[torch.Tensor]:
-        data = tuple(zip(*batch))
-        sequences = data[0]
-        sequences = [torch.tensor(self.tokenizer.tokenize(s)) for s in sequences]
-        sequences = [i.view(-1, 1) for i in sequences]
-        maxlen = max([i.shape[0] for i in sequences])
-        padded = [
-            F.pad(i, (0, 0, 0, maxlen - i.shape[0]), "constant", self.pad_tok)
-            for i in sequences
-        ]
-        padded = torch.stack(padded)
-        mask = [torch.ones(i.shape[0]) for i in sequences]
-        mask = [F.pad(i, (0, maxlen - i.shape[0])) for i in mask]
-        mask = torch.stack(mask)
-        y = data[1]
-        y = torch.tensor(y).unsqueeze(-1)
-        ohe = []
-        for i in padded:
-            i_onehot = torch.FloatTensor(maxlen, len(self.alphabet))
-            i_onehot.zero_()
-            i_onehot.scatter_(1, i, 1)
-            ohe.append(i_onehot)
-        padded = torch.stack(ohe)
-
-        return padded, y, mask
-
-
-class LengthMaxPool1D(nn.Module):
-    def __init__(self, in_dim, out_dim, linear=False):
-        super().__init__()
-        self.linear = linear
-        if self.linear:
-            self.layer = nn.Linear(in_dim, out_dim)
-
-    def forward(self, x):
-        if self.linear:
-            x = F.relu(self.layer(x))
-        x = torch.max(x, dim=1)[0]
-        return x
 
 
 class FluorescenceModel(nn.Module):

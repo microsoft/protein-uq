@@ -2,12 +2,14 @@ import pandas as pd
 import numpy as np
 import re
 from pathlib import Path
+from typing import Any, List
 import sys
 
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from scipy import stats
 
 import torch
+import torch.nn.functional as F
 from torch.utils.data import Dataset, TensorDataset
 
 vocab = [
@@ -33,6 +35,65 @@ vocab = [
     "Y",
 ]
 pad_index = len(vocab)  # pad index is 20
+
+
+class Tokenizer(object):
+    """Convert between strings and their one-hot representations."""
+
+    def __init__(self, alphabet: str):
+        self.alphabet = alphabet
+        self.a_to_t = {a: i for i, a in enumerate(self.alphabet)}
+        self.t_to_a = {i: a for i, a in enumerate(self.alphabet)}
+
+    @property
+    def vocab_size(self) -> int:
+        return len(self.alphabet)
+
+    def tokenize(self, seq: str) -> np.ndarray:
+        return np.array([self.a_to_t[a] for a in seq])
+
+    def untokenize(self, x) -> str:
+        return "".join([self.t_to_a[t] for t in x])
+
+
+class ASCollater(object):
+    def __init__(
+        self, alphabet: str, tokenizer: object, pad=False, pad_tok=0.0, backwards=False
+    ):
+        self.pad = pad
+        self.pad_tok = pad_tok
+        self.tokenizer = tokenizer
+        self.backwards = backwards
+        self.alphabet = alphabet
+
+    def __call__(
+        self,
+        batch: List[Any],
+    ) -> List[torch.Tensor]:
+        data = tuple(zip(*batch))
+        sequences = data[0]
+        sequences = [torch.tensor(self.tokenizer.tokenize(s)) for s in sequences]
+        sequences = [i.view(-1, 1) for i in sequences]
+        maxlen = max([i.shape[0] for i in sequences])
+        padded = [
+            F.pad(i, (0, 0, 0, maxlen - i.shape[0]), "constant", self.pad_tok)
+            for i in sequences
+        ]
+        padded = torch.stack(padded)
+        mask = [torch.ones(i.shape[0]) for i in sequences]
+        mask = [F.pad(i, (0, maxlen - i.shape[0])) for i in mask]
+        mask = torch.stack(mask)
+        y = data[1]
+        y = torch.tensor(y).unsqueeze(-1)
+        ohe = []
+        for i in padded:
+            i_onehot = torch.FloatTensor(maxlen, len(self.alphabet))
+            i_onehot.zero_()
+            i_onehot.scatter_(1, i, 1)
+            ohe.append(i_onehot)
+        padded = torch.stack(ohe)
+
+        return padded, y, mask
 
 
 def encode_pad_seqs(s, length, vocab=vocab):
@@ -67,7 +128,7 @@ def load_dataset(dataset, split, val_split=True):
     """returns dataframe of train, (val), test sets, with max_length param"""
 
     # datadir = "../../data/" + dataset + "/splits/"
-    datadir = '/home/kpg/protein-uq/data/'+dataset+'/splits/' # debugging
+    datadir = "/home/kpg/protein-uq/data/" + dataset + "/splits/"  # debugging
 
     path = datadir + split
     print("reading dataset:", split)
@@ -207,6 +268,51 @@ class HugeDataset(Dataset):
         return e, self.label[index]
 
 
+def negative_log_likelihood(pred_targets, pred_var, targets):
+    clamped_var = torch.clamp(pred_var, min=0.00001)
+    loss = torch.log(clamped_var) / 2 + (pred_targets - targets) ** 2 / (
+        2 * clamped_var
+    )
+    return torch.mean(loss)
+
+
+def evidential_loss(mu, v, alpha, beta, targets, lam=1, epsilon=1e-4):
+    """
+    Use Deep Evidential Regression negative log likelihood loss + evidential
+        regularizer
+
+    :mu: pred mean parameter for NIG
+    :v: pred lam parameter for NIG
+    :alpha: predicted parameter for NIG
+    :beta: Predicted parmaeter for NIG
+    :targets: Outputs to predict
+
+    :return: Loss
+    """
+    # Calculate NLL loss
+    twoBlambda = 2 * beta * (1 + v)
+    nll = (
+        0.5 * torch.log(np.pi / v)
+        - alpha * torch.log(twoBlambda)
+        + (alpha + 0.5) * torch.log(v * (targets - mu) ** 2 + twoBlambda)
+        + torch.lgamma(alpha)
+        - torch.lgamma(alpha + 0.5)
+    )
+
+    L_NLL = nll  # torch.mean(nll, dim=-1)
+
+    # Calculate regularizer based on absolute error of prediction
+    error = torch.abs((targets - mu))
+    reg = error * (2 * v + alpha)
+    L_REG = reg  # torch.mean(reg, dim=-1)
+
+    # Loss = L_NLL + L_REG
+    # TODO If we want to optimize the dual- of the objective use the line below:
+    loss = L_NLL + lam * (L_REG - epsilon)
+
+    return torch.mean(loss)
+
+
 def evaluate_miscalibration_area(abs_error, uncertainty):
     standard_devs = abs_error / uncertainty
     probabilities = [
@@ -251,11 +357,11 @@ def evaluate_log_likelihood(error, uncertainty):
 
     for err, unc in zip(error, uncertainty):
         # Encourage small standard deviations.
-        log_likelihood -= np.log(2 * np.pi * max(0.00001, unc**2)) / 2
-        optimal_log_likelihood -= np.log(2 * np.pi * err**2) / 2
+        log_likelihood -= np.log(2 * np.pi * max(0.00001, unc ** 2)) / 2
+        optimal_log_likelihood -= np.log(2 * np.pi * err ** 2) / 2
 
         # Penalize for large error.
-        log_likelihood -= err**2 / (2 * max(0.00001, unc**2))
+        log_likelihood -= err ** 2 / (2 * max(0.00001, unc ** 2))
         optimal_log_likelihood -= 1 / 2
 
     return {

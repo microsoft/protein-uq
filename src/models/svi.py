@@ -1,23 +1,24 @@
 import argparse
-from csv import writer
-from datetime import datetime
 import os
-from typing import Any, List
+from csv import writer
+from dataclasses import dataclass
+from datetime import datetime
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from dataclasses import dataclass
 from scipy.stats import spearmanr
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import StandardScaler
 from torch import distributions
 from torch.utils.data import DataLoader
 
+from models import LengthMaxPool1D, MaskedConv1d
 from train_all import split_dict
-from utils import SequenceDataset, calculate_metrics, load_dataset
+from utils import (ASCollater, SequenceDataset, Tokenizer, calculate_metrics,
+                   load_dataset)
 
 AAINDEX_ALPHABET = "ARNDCQEGHILKMFPSTWYVXU"
 
@@ -89,159 +90,12 @@ class KL:
     accumulated_kl_div = 0
 
 
-# class Model(nn.Module):
-#     def __init__(self, in_size, hidden_size, out_size, n_batches):
-#         super().__init__()
-#         self.kl_loss = KL
-
-#         self.layers = nn.Sequential(
-#             LinearVariational(in_size, hidden_size, self.kl_loss, n_batches),
-#             nn.ReLU(),
-#             LinearVariational(hidden_size, hidden_size, self.kl_loss, n_batches),
-#             nn.ReLU(),
-#             LinearVariational(hidden_size, out_size, self.kl_loss, n_batches),
-#             nn.LogSoftmax(),
-#         )
-
-#     @property
-#     def accumulated_kl_div(self):
-#         return self.kl_loss.accumulated_kl_div
-
-#     def reset_kl_div(self):
-#         self.kl_loss.accumulated_kl_div = 0
-
-#     def forward(self, x):
-#         x = x.view(-1, 784)
-#         return self.layers(x)
-
-
 def det_loss(y, y_pred, model):
     # batch_size = y.shape[0]
     reconstruction_error = F.mse_loss(y_pred, y, reduction="mean")
     kl = model.accumulated_kl_div
     model.reset_kl_div()
     return reconstruction_error + kl, reconstruction_error, kl
-
-
-class Tokenizer(object):
-    """Convert between strings and their one-hot representations."""
-
-    def __init__(self, alphabet: str):
-        self.alphabet = alphabet
-        self.a_to_t = {a: i for i, a in enumerate(self.alphabet)}
-        self.t_to_a = {i: a for i, a in enumerate(self.alphabet)}
-
-    @property
-    def vocab_size(self) -> int:
-        return len(self.alphabet)
-
-    def tokenize(self, seq: str) -> np.ndarray:
-        return np.array([self.a_to_t[a] for a in seq])
-
-    def untokenize(self, x) -> str:
-        return "".join([self.t_to_a[t] for t in x])
-
-
-class MaskedConv1d(nn.Conv1d):
-    """A masked 1-dimensional convolution layer.
-
-    Takes the same arguments as torch.nn.Conv1D, except that the padding is set automatically.
-
-         Shape:
-            Input: (N, L, in_channels)
-            input_mask: (N, L, 1), optional
-            Output: (N, L, out_channels)
-    """
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        stride: int = 1,
-        dilation: int = 1,
-        groups: int = 1,
-        bias: bool = True,
-    ):
-        """
-        :param in_channels: input channels
-        :param out_channels: output channels
-        :param kernel_size: the kernel width
-        :param stride: filter shift
-        :param dilation: dilation factor
-        :param groups: perform depth-wise convolutions
-        :param bias: adds learnable bias to output
-        """
-        padding = dilation * (kernel_size - 1) // 2
-        super().__init__(
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride=stride,
-            dilation=dilation,
-            groups=groups,
-            bias=bias,
-            padding=padding,
-        )
-
-    def forward(self, x, input_mask=None):
-        if input_mask is not None:
-            x = x * input_mask
-        return super().forward(x.transpose(1, 2)).transpose(1, 2)
-
-
-class ASCollater(object):
-    def __init__(
-        self, alphabet: str, tokenizer: object, pad=False, pad_tok=0.0, backwards=False
-    ):
-        self.pad = pad
-        self.pad_tok = pad_tok
-        self.tokenizer = tokenizer
-        self.backwards = backwards
-        self.alphabet = alphabet
-
-    def __call__(
-        self,
-        batch: List[Any],
-    ) -> List[torch.Tensor]:
-        data = tuple(zip(*batch))
-        sequences = data[0]
-        sequences = [torch.tensor(self.tokenizer.tokenize(s)) for s in sequences]
-        sequences = [i.view(-1, 1) for i in sequences]
-        maxlen = max([i.shape[0] for i in sequences])
-        padded = [
-            F.pad(i, (0, 0, 0, maxlen - i.shape[0]), "constant", self.pad_tok)
-            for i in sequences
-        ]
-        padded = torch.stack(padded)
-        mask = [torch.ones(i.shape[0]) for i in sequences]
-        mask = [F.pad(i, (0, maxlen - i.shape[0])) for i in mask]
-        mask = torch.stack(mask)
-        y = data[1]
-        y = torch.tensor(y).unsqueeze(-1)
-        ohe = []
-        for i in padded:
-            i_onehot = torch.FloatTensor(maxlen, len(self.alphabet))
-            i_onehot.zero_()
-            i_onehot.scatter_(1, i, 1)
-            ohe.append(i_onehot)
-        padded = torch.stack(ohe)
-
-        return padded, y, mask
-
-
-class LengthMaxPool1D(nn.Module):
-    def __init__(self, in_dim, out_dim, linear=False):
-        super().__init__()
-        self.linear = linear
-        if self.linear:
-            self.layer = nn.Linear(in_dim, out_dim)
-
-    def forward(self, x):
-        if self.linear:
-            x = F.relu(self.layer(x))
-        x = torch.max(x, dim=1)[0]
-        return x
 
 
 class FluorescenceModel(nn.Module):
