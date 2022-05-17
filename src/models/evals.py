@@ -1,12 +1,11 @@
-from sklearn.metrics import mean_squared_error
-from scipy import stats
-
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
 import pickle
 
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
 import torch
+from scipy import stats
+from sklearn.metrics import mean_squared_error
 
 
 def concat_tensor(tensor_list, keep_tensor=False):

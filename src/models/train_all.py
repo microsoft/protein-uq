@@ -10,7 +10,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 from evals import evaluate_esm
-from models import ESMAttention1dMean, ESMAttention1d
+from models import ESMAttention1d, ESMAttention1dMean
 from train import train_esm
 from utils import load_dataset, load_esm_dataset
 
