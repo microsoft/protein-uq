@@ -151,11 +151,11 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-*.out
+*.out*
 src/models/evals_new/*.csv
 .vscode/settings.json
 .vscode/launch.json
-src/models/bestmodel*.tar
+*.tar
 *test_preds.csv
 *.npz
 *.tar.gz

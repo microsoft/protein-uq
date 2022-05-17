@@ -474,7 +474,7 @@ def train(args):
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                 },
-                args.out_fpath + "/" + bestmodel_name,
+                args.out_fpath + "/bestmodels" + "/" + bestmodel_name,
             )
         else:
             p += 1
@@ -482,7 +482,7 @@ def train(args):
             print("MET PATIENCE")
             break
     print("Testing...")
-    sd = torch.load(args.out_fpath + "/" + bestmodel_name)
+    sd = torch.load(args.out_fpath + "/bestmodels" + "/" + bestmodel_name)
     model.load_state_dict(sd["model_state_dict"])
     dl_valid_AA = dl_test_AA
 
@@ -504,7 +504,7 @@ def train(args):
 
     print("rho = %.2f" % val_rho)
     print("mse = %.2f" % mse)
-    np.savez_compressed("%s.npz" % args.task, prediction=pre, tgt=tgt)
+    np.savez_compressed("preds_cnn/%s.npz" % args.task, prediction=pre, tgt=tgt)
     # with open(Path.cwd() / 'evals_new'/ (args.dataset+'_results.csv'), 'a', newline='') as f:
     #     writer(f).writerow([args.dataset, 'CNN', split, val_rho, mse, e, args.kernel_size, args.input_size, args.dropout])
 
