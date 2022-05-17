@@ -1,23 +1,18 @@
-import numpy as np
+import argparse
 import random
-import sys
+import re
+from csv import writer
 from pathlib import Path
 
 import torch
 import torch.nn as nn
-from torch.utils.data import TensorDataset, DataLoader
+from torch import optim
+from torch.utils.data import DataLoader
 
-import re
-from csv import writer
-
-sys.path.append("/.../.../FLIP/baselines/")
-
-from utils import *
-from evals import *
-from models import *
-from train import *
-
-import argparse
+from evals import evaluate_esm
+from models import ESMAttention1dMean, ESMAttention1d
+from train import train_esm
+from utils import load_dataset, load_esm_dataset
 
 split_dict = {
     "aav_1": "des_mut",
@@ -28,9 +23,6 @@ split_dict = {
     "aav_6": "low_vs_high",
     "aav_7": "sampled",
     "meltome_mixed": "mixed_split",
-    "meltome_mixed_short": "mixed_split_short",
-    "meltome_mixed_short99": "mixed_split_short99",
-    "meltome_mixed_short999": "mixed_split_short999",
     "meltome_human": "human",
     "meltome_human_cell": "human_cell",
     "gb1_1": "one_vs_rest",
