@@ -66,8 +66,8 @@ def get_data(
 def load_dataset(dataset, split, val_split=True):
     """returns dataframe of train, (val), test sets, with max_length param"""
 
-    datadir = "../../data/" + dataset + "/splits/"
-    # datadir = '/home/kpg/protein-uq/data/'+dataset+'/splits/' # debugging
+    # datadir = "../../data/" + dataset + "/splits/"
+    datadir = '/home/kpg/protein-uq/data/'+dataset+'/splits/' # debugging
 
     path = datadir + split
     print("reading dataset:", split)

@@ -154,3 +154,11 @@ cython_debug/
 *.out
 src/models/evals_new/*.csv
 .vscode/settings.json
+.vscode/launch.json
+src/models/bestmodel*.tar
+*test_preds.csv
+*.npz
+*.tar.gz
+evals_new_gp_ky.zip 
+data/*/splits/*.csv
+protein-uq_lambda*.yml
