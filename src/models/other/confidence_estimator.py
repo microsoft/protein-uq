@@ -10,21 +10,22 @@ from rdkit.Chem import AllChem
 
 from chemprop.utils import negative_log_likelihood
 
+
 def confidence_estimator_builder(confidence_method: str):
     return {
-        'nn': NNEstimator,
-        'gaussian': GaussianProcessEstimator,
-        'random_forest': RandomForestEstimator,
-        'tanimoto': TanimotoEstimator,
-        'ensemble': EnsembleEstimator,
-        'latent_space': LatentSpaceEstimator,
-        'bootstrap': BootstrapEstimator,
-        'snapshot': SnapshotEstimator,
-        'dropout': DropoutEstimator,
-        'fp_random_forest': FPRandomForestEstimator,
-        'fp_gaussian': FPGaussianProcessEstimator,
-        'evidence': EvidenceEstimator,
-        'sigmoid': SigmoidEstimator
+        "nn": NNEstimator,
+        "gaussian": GaussianProcessEstimator,
+        "random_forest": RandomForestEstimator,
+        "tanimoto": TanimotoEstimator,
+        "ensemble": EnsembleEstimator,
+        "latent_space": LatentSpaceEstimator,
+        "bootstrap": BootstrapEstimator,
+        "snapshot": SnapshotEstimator,
+        "dropout": DropoutEstimator,
+        "fp_random_forest": FPRandomForestEstimator,
+        "fp_gaussian": FPGaussianProcessEstimator,
+        "evidence": EvidenceEstimator,
+        "sigmoid": SigmoidEstimator,
     }[confidence_method]
 
 
@@ -47,8 +48,8 @@ class ConfidenceEstimator:
     def _scale_confidence(self, confidence):
         return self.scaler.stds * confidence
 
-    def export_std(self): 
-        """ Export the computed std function. This is handeled in compute_confidence"""
+    def export_std(self):
+        """Export the computed std function. This is handeled in compute_confidence"""
         return self.computed_std
 
 
@@ -57,9 +58,11 @@ class DroppingEstimator(ConfidenceEstimator):
         super().__init__(train_data, new_data, scaler, args)
 
         self.sum_last_hidden_train = np.zeros(
-            (len(self.train_data.smiles()), self.args.last_hidden_size))
+            (len(self.train_data.smiles()), self.args.last_hidden_size)
+        )
         self.sum_last_hidden_new = np.zeros(
-            (len(self.new_data.smiles()), self.args.last_hidden_size))
+            (len(self.new_data.smiles()), self.args.last_hidden_size)
+        )
 
     def process_model(self, model, predict):
         model.eval()
@@ -70,7 +73,7 @@ class DroppingEstimator(ConfidenceEstimator):
             data=self.train_data,
             batch_size=self.args.batch_size,
             scaler=None,
-            quiet=self.args.quiet
+            quiet=self.args.quiet,
         )
         self.sum_last_hidden_train += np.array(last_hidden_train)
 
@@ -79,7 +82,7 @@ class DroppingEstimator(ConfidenceEstimator):
             data=self.new_data,
             batch_size=self.args.batch_size,
             scaler=None,
-            quiet=self.args.quiet
+            quiet=self.args.quiet,
         )
         self.sum_last_hidden_new += np.array(last_hidden_new)
 
@@ -114,8 +117,8 @@ class SigmoidEstimator(ConfidenceEstimator):
         super().__init__(train_data, new_data, scaler, args)
 
     def process_model(self, model, predict):
-        def categorical_variance(p): #assumes binary classification
-            return p*(1-p)**2  + (1-p)*p**2
+        def categorical_variance(p):  # assumes binary classification
+            return p * (1 - p) ** 2 + (1 - p) * p ** 2
 
         preds = predict(
             model=model,
@@ -140,14 +143,14 @@ class EvidenceEstimator(ConfidenceEstimator):
         super().__init__(train_data, new_data, scaler, args)
 
     def process_model(self, model, predict):
-        preds, confidence, var  = predict(
+        preds, confidence, var = predict(
             model=model,
             data=self.new_data,
             batch_size=self.args.batch_size,
             scaler=self.scaler,
             quiet=self.args.quiet,
-            confidence=True, 
-            export_var = True, 
+            confidence=True,
+            export_var=True,
         )
 
         if len(preds) != 0:
@@ -170,17 +173,19 @@ class GaussianProcessEstimator(DroppingEstimator):
         for task in range(self.args.num_tasks):
             kernel = GPy.kern.Linear(input_dim=self.args.last_hidden_size)
             gaussian = GPy.models.SparseGPRegression(
-                avg_last_hidden_train,
-                transformed[:, task:task + 1], kernel)
+                avg_last_hidden_train, transformed[:, task : task + 1], kernel
+            )
             gaussian.optimize()
 
             avg_preds, avg_var = gaussian.predict(avg_last_hidden_new)
 
-            new_preds[:, task:task+1] = avg_preds
-            self.conf[:, task:task+1] = np.sqrt(avg_var)
+            new_preds[:, task : task + 1] = avg_preds
+            self.conf[:, task : task + 1] = np.sqrt(avg_var)
 
-        return (self.scaler.inverse_transform(new_preds),
-                self._scale_confidence(self.conf))
+        return (
+            self.scaler.inverse_transform(new_preds),
+            self._scale_confidence(self.conf),
+        )
 
 
 class FPGaussianProcessEstimator(ConfidenceEstimator):
@@ -198,17 +203,19 @@ class FPGaussianProcessEstimator(ConfidenceEstimator):
         for task in range(self.args.num_tasks):
             kernel = GPy.kern.Linear(input_dim=train_fps.shape[1])
             gaussian = GPy.models.SparseGPRegression(
-                train_fps,
-                scaled_train_targets[:, task:task + 1], kernel)
+                train_fps, scaled_train_targets[:, task : task + 1], kernel
+            )
             gaussian.optimize()
 
             avg_preds, avg_var = gaussian.predict(new_fps)
 
-            new_preds[:, task:task+1] = avg_preds
-            self.conf[:, task:task+1] = np.sqrt(avg_var)
+            new_preds[:, task : task + 1] = avg_preds
+            self.conf[:, task : task + 1] = np.sqrt(avg_var)
 
-        return (self.scaler.inverse_transform(new_preds),
-            self._scale_confidence(self.conf))
+        return (
+            self.scaler.inverse_transform(new_preds),
+            self._scale_confidence(self.conf),
+        )
 
 
 class RandomForestEstimator(DroppingEstimator):
@@ -224,12 +231,18 @@ class RandomForestEstimator(DroppingEstimator):
             forest.fit(avg_last_hidden_train, transformed[:, task])
 
             new_preds[:, task] = forest.predict(avg_last_hidden_new)
-            individual_predictions = np.array([
-                estimator.predict(avg_last_hidden_new) for estimator in forest.estimators_])
+            individual_predictions = np.array(
+                [
+                    estimator.predict(avg_last_hidden_new)
+                    for estimator in forest.estimators_
+                ]
+            )
             self.conf[:, task] = np.std(individual_predictions, axis=0)
 
-        return (self.scaler.inverse_transform(new_preds),
-                self._scale_confidence(self.conf))
+        return (
+            self.scaler.inverse_transform(new_preds),
+            self._scale_confidence(self.conf),
+        )
 
 
 class FPRandomForestEstimator(ConfidenceEstimator):
@@ -250,12 +263,15 @@ class FPRandomForestEstimator(ConfidenceEstimator):
             forest.fit(train_fps, scaled_train_targets[:, task])
 
             new_preds[:, task] = forest.predict(new_fps)
-            individual_predictions = np.array([
-                estimator.predict(new_fps) for estimator in forest.estimators_])
+            individual_predictions = np.array(
+                [estimator.predict(new_fps) for estimator in forest.estimators_]
+            )
             self.conf[:, task] = np.std(individual_predictions, axis=0)
 
-        return (self.scaler.inverse_transform(new_preds),
-                self._scale_confidence(self.conf))
+        return (
+            self.scaler.inverse_transform(new_preds),
+            self._scale_confidence(self.conf),
+        )
 
 
 class LatentSpaceEstimator(DroppingEstimator):
@@ -265,10 +281,12 @@ class LatentSpaceEstimator(DroppingEstimator):
         for input_ in range(len(avg_last_hidden_new)):
             distances = np.zeros(len(avg_last_hidden_train))
             for train_input in range(len(avg_last_hidden_train)):
-                difference = avg_last_hidden_new[input_] - avg_last_hidden_train[train_input]
+                difference = (
+                    avg_last_hidden_new[input_] - avg_last_hidden_train[train_input]
+                )
                 distances[train_input] = np.sqrt(np.sum(difference * difference))
 
-            self.conf[input_, :] = sum(heapq.nsmallest(5, distances))/5
+            self.conf[input_, :] = sum(heapq.nsmallest(5, distances)) / 5
 
         return (new_preds, self.conf)
 
@@ -317,7 +335,10 @@ class TanimotoEstimator(ConfidenceEstimator):
 
         for i in range(len(new_smiles)):
             self.conf[i, :] = np.ones((self.args.num_tasks)) * tanimoto(
-                new_smiles[i], train_smiles_sfp, lambda x: sum(heapq.nsmallest(8, x))/8)
+                new_smiles[i],
+                train_smiles_sfp,
+                lambda x: sum(heapq.nsmallest(8, x)) / 8,
+            )
 
         return (new_preds, self.conf)
 
@@ -331,8 +352,9 @@ class BoostEstimator(DroppingEstimator):
     pass
 
 
-def morgan_fingerprint(smiles: str, radius: int = 3, num_bits: int = 2048,
-                       use_counts: bool = False) -> np.ndarray:
+def morgan_fingerprint(
+    smiles: str, radius: int = 3, num_bits: int = 2048, use_counts: bool = False
+) -> np.ndarray:
     """
     Generates a morgan fingerprint for a smiles string.
 
@@ -348,10 +370,12 @@ def morgan_fingerprint(smiles: str, radius: int = 3, num_bits: int = 2048,
         mol = smiles
     if use_counts:
         fp_vect = AllChem.GetHashedMorganFingerprint(
-            mol, radius, nBits=num_bits, useChirality=True)
+            mol, radius, nBits=num_bits, useChirality=True
+        )
     else:
         fp_vect = AllChem.GetMorganFingerprintAsBitVect(
-            mol, radius, nBits=num_bits, useChirality=True)
+            mol, radius, nBits=num_bits, useChirality=True
+        )
     fp = np.zeros((1,))
     DataStructs.ConvertToNumpyArray(fp_vect, fp)
 
@@ -364,8 +388,7 @@ def tanimoto(smile, train_smiles_sfp, operation):
     tanimoto_distance = []
 
     for sfp in train_smiles_sfp:
-        tsim = np.dot(fp, sfp) / (fp.sum() +
-                                  sfp.sum() - np.dot(fp, sfp))
+        tsim = np.dot(fp, sfp) / (fp.sum() + sfp.sum() - np.dot(fp, sfp))
         tanimoto_distance.append(-np.log2(max(0.0001, tsim)))
 
     return operation(tanimoto_distance)

@@ -1,203 +1,39 @@
-from typing import List, Any
-from datetime import datetime
 import argparse
+import functools
+from csv import writer
+from datetime import datetime
+from pathlib import Path
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 from scipy.stats import spearmanr
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import StandardScaler
-
-import functools
-
-import torch
-import numpy as np
-import torch.nn as nn
-import torch.nn.functional as F
-
 from torch.utils.data import DataLoader
-import torch.optim as optim
 
+from models import LengthMaxPool1D, MaskedConv1d
 from train_all import split_dict
-from utils import SequenceDataset, load_dataset, calculate_metrics
-from csv import writer
-from pathlib import Path
+from utils import (
+    ASCollater,
+    SequenceDataset,
+    Tokenizer,
+    calculate_metrics,
+    evidential_loss,
+    load_dataset,
+    negative_log_likelihood,
+)
 
 AAINDEX_ALPHABET = "ARNDCQEGHILKMFPSTWYVXU"
 
 
-def negative_log_likelihood(pred_targets, pred_var, targets):
-    clamped_var = torch.clamp(pred_var, min=0.00001)
-    loss = torch.log(clamped_var) / 2 + (pred_targets - targets) ** 2 / (
-        2 * clamped_var
-    )
-    return torch.mean(loss)
-
-
-def evidential_loss(mu, v, alpha, beta, targets, lam=1, epsilon=1e-4):
-    """
-    Use Deep Evidential Regression negative log likelihood loss + evidential
-        regularizer
-
-    :mu: pred mean parameter for NIG
-    :v: pred lam parameter for NIG
-    :alpha: predicted parameter for NIG
-    :beta: Predicted parmaeter for NIG
-    :targets: Outputs to predict
-
-    :return: Loss
-    """
-    # Calculate NLL loss
-    twoBlambda = 2 * beta * (1 + v)
-    nll = (
-        0.5 * torch.log(np.pi / v)
-        - alpha * torch.log(twoBlambda)
-        + (alpha + 0.5) * torch.log(v * (targets - mu) ** 2 + twoBlambda)
-        + torch.lgamma(alpha)
-        - torch.lgamma(alpha + 0.5)
-    )
-
-    L_NLL = nll  # torch.mean(nll, dim=-1)
-
-    # Calculate regularizer based on absolute error of prediction
-    error = torch.abs((targets - mu))
-    reg = error * (2 * v + alpha)
-    L_REG = reg  # torch.mean(reg, dim=-1)
-
-    # Loss = L_NLL + L_REG
-    # TODO If we want to optimize the dual- of the objective use the line below:
-    loss = L_NLL + lam * (L_REG - epsilon)
-
-    return torch.mean(loss)
-
-
-class Tokenizer(object):
-    """Convert between strings and their one-hot representations."""
-
-    def __init__(self, alphabet: str):
-        self.alphabet = alphabet
-        self.a_to_t = {a: i for i, a in enumerate(self.alphabet)}
-        self.t_to_a = {i: a for i, a in enumerate(self.alphabet)}
-
-    @property
-    def vocab_size(self) -> int:
-        return len(self.alphabet)
-
-    def tokenize(self, seq: str) -> np.ndarray:
-        return np.array([self.a_to_t[a] for a in seq])
-
-    def untokenize(self, x) -> str:
-        return "".join([self.t_to_a[t] for t in x])
-
-
-class MaskedConv1d(nn.Conv1d):
-    """A masked 1-dimensional convolution layer.
-
-    Takes the same arguments as torch.nn.Conv1D, except that the padding is set automatically.
-
-         Shape:
-            Input: (N, L, in_channels)
-            input_mask: (N, L, 1), optional
-            Output: (N, L, out_channels)
-    """
-
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        stride: int = 1,
-        dilation: int = 1,
-        groups: int = 1,
-        bias: bool = True,
-    ):
-        """
-        :param in_channels: input channels
-        :param out_channels: output channels
-        :param kernel_size: the kernel width
-        :param stride: filter shift
-        :param dilation: dilation factor
-        :param groups: perform depth-wise convolutions
-        :param bias: adds learnable bias to output
-        """
-        padding = dilation * (kernel_size - 1) // 2
-        super().__init__(
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride=stride,
-            dilation=dilation,
-            groups=groups,
-            bias=bias,
-            padding=padding,
-        )
-
-    def forward(self, x, input_mask=None):
-        if input_mask is not None:
-            x = x * input_mask
-        return super().forward(x.transpose(1, 2)).transpose(1, 2)
-
-
-class ASCollater(object):
-    def __init__(
-        self, alphabet: str, tokenizer: object, pad=False, pad_tok=0.0, backwards=False
-    ):
-        self.pad = pad
-        self.pad_tok = pad_tok
-        self.tokenizer = tokenizer
-        self.backwards = backwards
-        self.alphabet = alphabet
-
-    def __call__(
-        self,
-        batch: List[Any],
-    ) -> List[torch.Tensor]:
-        data = tuple(zip(*batch))
-        sequences = data[0]
-        sequences = [torch.tensor(self.tokenizer.tokenize(s)) for s in sequences]
-        sequences = [i.view(-1, 1) for i in sequences]
-        maxlen = max([i.shape[0] for i in sequences])
-        padded = [
-            F.pad(i, (0, 0, 0, maxlen - i.shape[0]), "constant", self.pad_tok)
-            for i in sequences
-        ]
-        padded = torch.stack(padded)
-        mask = [torch.ones(i.shape[0]) for i in sequences]
-        mask = [F.pad(i, (0, maxlen - i.shape[0])) for i in mask]
-        mask = torch.stack(mask)
-        y = data[1]
-        y = torch.tensor(y).unsqueeze(-1)
-        ohe = []
-        for i in padded:
-            i_onehot = torch.FloatTensor(maxlen, len(self.alphabet))
-            i_onehot.zero_()
-            i_onehot.scatter_(1, i, 1)
-            ohe.append(i_onehot)
-        padded = torch.stack(ohe)
-
-        return padded, y, mask
-
-
-class LengthMaxPool1D(nn.Module):
-    def __init__(self, in_dim, out_dim, linear=False):
-        super().__init__()
-        self.linear = linear
-        if self.linear:
-            self.layer = nn.Linear(in_dim, out_dim)
-
-    def forward(self, x):
-        if self.linear:
-            x = F.relu(self.layer(x))
-        x = torch.max(x, dim=1)[0]
-        return x
-
-
 class FluorescenceModel(nn.Module):
-    def __init__(
-        self, n_tokens, kernel_size, input_size, dropout, mve=False, evidential=False
-    ):
+    def __init__(self, n_tokens, kernel_size, input_size, dropout, mve=False, evidential=False):
         super(FluorescenceModel, self).__init__()
         self.encoder = MaskedConv1d(n_tokens, input_size, kernel_size=kernel_size)
-        self.embedding = LengthMaxPool1D(
-            linear=True, in_dim=input_size, out_dim=input_size * 2
-        )
+        self.embedding = LengthMaxPool1D(linear=True, in_dim=input_size, out_dim=input_size * 2)
         if mve:
             output_size = 2
         elif evidential:
@@ -211,11 +47,7 @@ class FluorescenceModel(nn.Module):
 
     def forward(self, x, mask, evidential=False):
         # encoder
-        x = F.relu(
-            self.encoder(
-                x, input_mask=mask.repeat(self.n_tokens, 1, 1).permute(1, 2, 0)
-            )
-        )
+        x = F.relu(self.encoder(x, input_mask=mask.repeat(self.n_tokens, 1, 1).permute(1, 2, 0)))
         x = x * mask.repeat(self.input_size, 1, 1).permute(1, 2, 0)
         # embed
         x = self.embedding(x)
@@ -226,19 +58,13 @@ class FluorescenceModel(nn.Module):
         if evidential:
             min_val = 1e-6
             # Split the outputs into the four distribution parameters
-            means, loglambdas, logalphas, logbetas = torch.split(
-                output, output.shape[1] // 4, dim=1
-            )
+            means, loglambdas, logalphas, logbetas = torch.split(output, output.shape[1] // 4, dim=1)
             lambdas = torch.nn.Softplus()(loglambdas) + min_val  # also called nu or v
-            alphas = (
-                torch.nn.Softplus()(logalphas) + min_val + 1
-            )  # add 1 for numerical contraints of Gamma function
+            alphas = torch.nn.Softplus()(logalphas) + min_val + 1  # add 1 for numerical contraints of Gamma function
             betas = torch.nn.Softplus()(logbetas) + min_val
 
             # Return these parameters as the output of the model
-            output = torch.stack((means, lambdas, alphas, betas), dim=2).view(
-                output.size()
-            )
+            output = torch.stack((means, lambdas, alphas, betas), dim=2).view(output.size())
         return output
 
 
@@ -324,9 +150,7 @@ def train(args):
         if args.mve:
             loss = criterion(output[:, 0], output[:, 1], np.squeeze(tgt))
         elif args.evidential:
-            loss = criterion(
-                output[:, 0], output[:, 1], output[:, 2], output[:, 3], np.squeeze(tgt)
-            )
+            loss = criterion(output[:, 0], output[:, 1], output[:, 2], output[:, 3], np.squeeze(tgt))
         else:
             loss = criterion(output, tgt)
         if train and not dropout_inference:
@@ -335,9 +159,7 @@ def train(args):
             optimizer.step()
         return loss.item(), output.detach().cpu(), tgt.detach().cpu()
 
-    def epoch(
-        model, train, current_step=0, return_values=False, dropout_inference=False
-    ):
+    def epoch(model, train, current_step=0, return_values=False, dropout_inference=False):
         start_time = datetime.now()
         if train:
             model = model.train()
@@ -355,9 +177,7 @@ def train(args):
         chunk_time = datetime.now()
         n_seen = 0
         for i, batch in enumerate(loader):
-            loss, output, tgt = step(
-                model, batch, train, dropout_inference=dropout_inference
-            )
+            loss, output, tgt = step(model, batch, train, dropout_inference=dropout_inference)
             losses.append(loss)
             outputs.append(output)
             tgts.append(tgt)
@@ -464,9 +284,7 @@ def train(args):
             )
             pre.append(list(pre_))
     else:
-        _, mse, val_rho, tgt, pre = epoch(
-            model, False, current_step=nsteps, return_values=True
-        )
+        _, mse, val_rho, tgt, pre = epoch(model, False, current_step=nsteps, return_values=True)
 
     if args.evidential:
         lambdas = pre[:, 1]  # also called nu or v
@@ -552,9 +370,7 @@ def main():
         epistemic_unc = np.squeeze(np.array(epistemic_unc))
 
         preds_mean = y_test_preds
-        preds_std = np.hstack((np.sqrt(aleatoric_unc), np.sqrt(epistemic_unc))).reshape(
-            (-1, 2)
-        )
+        preds_std = np.hstack((np.sqrt(aleatoric_unc), np.sqrt(epistemic_unc))).reshape((-1, 2))
 
     else:
         if args.mve:
@@ -589,9 +405,7 @@ def main():
         row = [args.dataset, args.algorithm_type, split_dict[args.task]]
         for metric in metrics:
             row.append(round(metric, 2))
-        with open(
-            Path.cwd() / "evals_new" / (args.dataset + "_results.csv"), "a", newline=""
-        ) as f:
+        with open(Path.cwd() / "evals_new" / (args.dataset + "_results.csv"), "a", newline="") as f:
             writer(f).writerow(row)
 
 
