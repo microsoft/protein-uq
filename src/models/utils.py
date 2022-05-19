@@ -106,29 +106,34 @@ def encode_pad_seqs(s, length, vocab=vocab):
     return result
 
 
-def get_data(
-    df, max_length, encode_pad=True, zip_dataset=True, reverse_seq_target=False
-):
+def get_data(df, max_length, encode_pad=True, zip_dataset=True, reverse_seq_target=False, one_hots=False): 
     """returns encoded and padded sequences with targets"""
     target = df.target.values.tolist()
-    seq = df.sequence.values.tolist()
-    if encode_pad:
+    seq = df.sequence.values.tolist() 
+    if encode_pad: 
         seq = [encode_pad_seqs(s, max_length) for s in seq]
-        print("encoding and padding all sequences to length", max_length)
+        print('encoded and padded all sequences to length', max_length)
+
+    if one_hots:
+        seq = [one_hot_pad_seqs(s, max_length) for s in seq]
+        print('one-hot encoded and padded all sequences to length', max_length)
+        print('flattened one-hot sequences')
+        return np.array(seq), np.array(target)
+
     if zip_dataset:
         if reverse_seq_target:
             return list(zip(target, seq))
         else:
             return list(zip(seq, target))
-    else:
+    else: 
         return torch.FloatTensor(seq), torch.FloatTensor(target)
 
 
-def load_dataset(dataset, split, val_split=True):
+def load_dataset(dataset, split, val_split=True): # TODO: get updated version of function from FLIP
     """returns dataframe of train, (val), test sets, with max_length param"""
 
     # datadir = "../../data/" + dataset + "/splits/"
-    datadir = "/home/kpg/protein-uq/data/" + dataset + "/splits/"  # debugging
+    datadir = "/home/kpg/microsoft/protein-uq/data/" + dataset + "/splits/"  # TODO: fix path (this one for debugging)
 
     path = datadir + split
     print("reading dataset:", split)
@@ -154,60 +159,55 @@ def load_dataset(dataset, split, val_split=True):
         return train, test, max_length
 
 
-def load_esm_dataset(dataset, model, split, mean, mut_mean, samples, index, flip):
+def load_esm_dataset(dataset, model, split, mean, mut_mean, flip, gb1_shorten=False):  # TODO: get updated version of function from FLIP
 
-    embedding_dir = Path("/../../embeddings/")
+    # embedding_dir = Path("../../../FLIP/baselines/embeddings/")  # TODO: change to path in this repo / not hard-coded
+    embedding_dir = Path("/home/kpg/microsoft/FLIP/baselines/embeddings/") # TODO: fix path (this one for debugging)
     PATH = embedding_dir / dataset / model / split
+    print('loading ESM embeddings:', split)
 
     if mean:
-        train = torch.load(PATH / "train_mean.pt")  # data_len x seq x 1280
-        val = torch.load(PATH / "val_mean.pt")
-        test = torch.load(PATH / "test_mean.pt")  # data_len x seq x 1280
+        train = torch.load(PATH / 'train_mean.pt') #data_len x seq x 1280
+        val = torch.load(PATH / 'val_mean.pt')
+        test = torch.load(PATH / 'test_mean.pt') #data_len x seq x 1280
     else:
-        train = torch.load(PATH / "train_aa.pt")  # data_len x seq x 1280
-        val = torch.load(PATH / "val_aa.pt")
-        test = torch.load(PATH / "test_aa.pt")  # data_len x seq x 1280
+        train = torch.load(PATH / 'train_aa.pt') #data_len x seq x 1280
+        val = torch.load(PATH / 'val_aa.pt')
+        test = torch.load(PATH / 'test_aa.pt') #data_len x seq x 1280
 
-    if dataset == "aav" and mut_mean is True:
+        if dataset == 'gb1' and gb1_shorten == True: #fix the sequence to be shorter
+            print('shortening gb1 to first 56 AAs')
+            train = train[:, :56, :]
+            val = val[:, :56, :]
+            test = test[:, :56, :]
+    
+    if dataset == 'aav' and mut_mean == True:
         train = torch.mean(train[:, 560:590, :], 1)
         val = torch.mean(val[:, 560:590, :], 1)
         test = torch.mean(test[:, 560:590, :], 1)
 
-    if dataset == "gb1" and mut_mean is True:  # positions 39, 40, 41, 54 in sequence
+    if dataset == 'gb1' and mut_mean == True: #positions 39, 40, 41, 54 in sequence
         train = torch.mean(train[:, [38, 39, 40, 53], :], 1)
         val = torch.mean(val[:, [38, 39, 40, 53], :], 1)
         test = torch.mean(test[:, [38, 39, 40, 53], :], 1)
+    
 
-    train_l = torch.load(PATH / "train_labels.pt")
-    val_l = torch.load(PATH / "val_labels.pt")
-    test_l = torch.load(PATH / "test_labels.pt")
-
-    # TEMPORARY FIX TODO: resave without the zeros!!!
-    # test = test[:test_l.shape[0]]
+    train_l = torch.load(PATH / 'train_labels.pt')
+    val_l = torch.load(PATH / 'val_labels.pt')
+    test_l = torch.load(PATH / 'test_labels.pt')
 
     if flip:
-        train_l, test_l = test_l, train_l
+        train_l, test_l = test_l, train_l 
         train, test = test, train
-
-    if index is not None:
-
-        train = train[samples[index]]
-        train_l = train_l[samples[index]]
-
+   
     train_esm_data = TensorDataset(train, train_l)
     val_esm_data = TensorDataset(val, val_l)
     test_esm_data = TensorDataset(test, test_l)
 
     max_length = test.shape[1]
 
-    print(
-        "loaded train/val/test:",
-        len(train_esm_data),
-        len(val_esm_data),
-        len(test_esm_data),
-        file=sys.stderr,
-    )
-
+    print('loaded train/val/test:', len(train_esm_data), len(val_esm_data), len(test_esm_data), file = sys.stderr) 
+    
     return train_esm_data, val_esm_data, test_esm_data, max_length
 
 
@@ -233,7 +233,7 @@ class SequenceDataset(Dataset):
             return row["sequence"], row["target"]
 
 
-class ESMSequenceDataset(Dataset):
+class ESMSequenceDataset(Dataset): #TODO: remove?
     "special dataset class just to deal with ESM tensors"
 
     def __init__(self, emb, mask, labels):
