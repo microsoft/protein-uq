@@ -9,8 +9,13 @@ from sklearn.linear_model import BayesianRidge
 from sklearn.preprocessing import StandardScaler
 
 from train_all import split_dict
-from utils import (SequenceDataset, Tokenizer, calculate_metrics, get_data, load_dataset,
-                   load_esm_dataset)
+from utils import (
+    SequenceDataset,
+    Tokenizer,
+    calculate_metrics,
+    load_dataset,
+    load_esm_dataset,
+)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("dataset", type=str, help="file path to data directory")
@@ -31,17 +36,20 @@ args = parser.parse_args()
 
 args.dropout = ""
 
-# args.dataset = "gb1"
-# args.task = "gb1_1"
-# args.esm = True
-# args.esm_mean = True
-
 AAINDEX_ALPHABET = "ARNDCQEGHILKMFPSTWYVXU"
 # grab data
 split = split_dict[args.task]
 
 if args.esm:
-    train, _, test, max_length = load_esm_dataset(args.dataset, 'esm1b', split, args.esm_mean, args.esm_mut_mean, args.esm_flip, args.esm_gb1_shorten)
+    train, _, test, max_length = load_esm_dataset(
+        args.dataset,
+        "esm1b",
+        split,
+        args.esm_mean,
+        args.esm_mut_mean,
+        args.esm_flip,
+        args.esm_gb1_shorten,
+    )
     X_train_enc = np.array([i[0].numpy() for i in train]).squeeze()
     y_train = [i[1].item() for i in train]
     X_test_enc = np.array([i[0].numpy() for i in test]).squeeze()
@@ -128,9 +136,7 @@ def main(args, X_train_enc, y_train, y_test):
         if args.esm_gb1_shorten:
             algorithm_type += "_gb1shorten"
 
-    metrics = calculate_metrics(
-        y_test, preds_mean, preds_std, args, split, y_train, algorithm_type
-    )
+    metrics = calculate_metrics(y_test, preds_mean, preds_std, args, split, y_train, algorithm_type)
 
     # Write metric results to file
     row = [args.dataset, algorithm_type, split]
@@ -139,9 +145,7 @@ def main(args, X_train_enc, y_train, y_test):
             row.append(metric)
         else:
             row.append(round(metric, 2))
-    with open(
-        Path.cwd() / "evals_new" / (args.dataset + "_results.csv"), "a", newline=""
-    ) as f:
+    with open(Path.cwd() / "evals_new" / (args.dataset + "_results.csv"), "a", newline="") as f:
         writer(f).writerow(row)
 
 

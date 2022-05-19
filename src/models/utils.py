@@ -57,9 +57,7 @@ class Tokenizer(object):
 
 
 class ASCollater(object):
-    def __init__(
-        self, alphabet: str, tokenizer: object, pad=False, pad_tok=0.0, backwards=False
-    ):
+    def __init__(self, alphabet: str, tokenizer: object, pad=False, pad_tok=0.0, backwards=False):
         self.pad = pad
         self.pad_tok = pad_tok
         self.tokenizer = tokenizer
@@ -75,10 +73,7 @@ class ASCollater(object):
         sequences = [torch.tensor(self.tokenizer.tokenize(s)) for s in sequences]
         sequences = [i.view(-1, 1) for i in sequences]
         maxlen = max([i.shape[0] for i in sequences])
-        padded = [
-            F.pad(i, (0, 0, 0, maxlen - i.shape[0]), "constant", self.pad_tok)
-            for i in sequences
-        ]
+        padded = [F.pad(i, (0, 0, 0, maxlen - i.shape[0]), "constant", self.pad_tok) for i in sequences]
         padded = torch.stack(padded)
         mask = [torch.ones(i.shape[0]) for i in sequences]
         mask = [F.pad(i, (0, maxlen - i.shape[0])) for i in mask]
@@ -106,18 +101,35 @@ def encode_pad_seqs(s, length, vocab=vocab):
     return result
 
 
-def get_data(df, max_length, encode_pad=True, zip_dataset=True, reverse_seq_target=False, one_hots=False): 
+def one_hot_pad_seqs(s, length, vocab=vocab):
+    aa_dict = {k: v for v, k in enumerate(vocab)}
+    embedded = np.zeros([length, len(vocab)])
+    for i, l in enumerate(s):
+        idx = aa_dict[l]
+        embedded[i, idx] = 1
+    embedded = embedded.flatten()
+    return embedded
+
+
+def get_data(
+    df,
+    max_length,
+    encode_pad=True,
+    zip_dataset=True,
+    reverse_seq_target=False,
+    one_hots=False,
+):
     """returns encoded and padded sequences with targets"""
     target = df.target.values.tolist()
-    seq = df.sequence.values.tolist() 
-    if encode_pad: 
+    seq = df.sequence.values.tolist()
+    if encode_pad:
         seq = [encode_pad_seqs(s, max_length) for s in seq]
-        print('encoded and padded all sequences to length', max_length)
+        print("encoded and padded all sequences to length", max_length)
 
     if one_hots:
         seq = [one_hot_pad_seqs(s, max_length) for s in seq]
-        print('one-hot encoded and padded all sequences to length', max_length)
-        print('flattened one-hot sequences')
+        print("one-hot encoded and padded all sequences to length", max_length)
+        print("flattened one-hot sequences")
         return np.array(seq), np.array(target)
 
     if zip_dataset:
@@ -125,11 +137,11 @@ def get_data(df, max_length, encode_pad=True, zip_dataset=True, reverse_seq_targ
             return list(zip(target, seq))
         else:
             return list(zip(seq, target))
-    else: 
+    else:
         return torch.FloatTensor(seq), torch.FloatTensor(target)
 
 
-def load_dataset(dataset, split, val_split=True): # TODO: get updated version of function from FLIP
+def load_dataset(dataset, split, val_split=True):  # TODO: get updated version of function from FLIP
     """returns dataframe of train, (val), test sets, with max_length param"""
 
     # datadir = "../../data/" + dataset + "/splits/"
@@ -140,9 +152,7 @@ def load_dataset(dataset, split, val_split=True): # TODO: get updated version of
 
     df = pd.read_csv(path)
 
-    df.sequence.apply(
-        lambda s: re.sub(r"[^A-Z]", "", s.upper())
-    )  # remove special characters
+    df.sequence.apply(lambda s: re.sub(r"[^A-Z]", "", s.upper()))  # remove special characters
     max_length = max(df.sequence.str.len())
 
     if val_split is True:
@@ -159,55 +169,62 @@ def load_dataset(dataset, split, val_split=True): # TODO: get updated version of
         return train, test, max_length
 
 
-def load_esm_dataset(dataset, model, split, mean, mut_mean, flip, gb1_shorten=False):  # TODO: get updated version of function from FLIP
+def load_esm_dataset(
+    dataset, model, split, mean, mut_mean, flip, gb1_shorten=False
+):  # TODO: get updated version of function from FLIP
 
     # embedding_dir = Path("../../../FLIP/baselines/embeddings/")  # TODO: change to path in this repo / not hard-coded
-    embedding_dir = Path("/home/kpg/microsoft/FLIP/baselines/embeddings/") # TODO: fix path (this one for debugging)
+    embedding_dir = Path("/home/kpg/microsoft/FLIP/baselines/embeddings/")  # TODO: fix path (this one for debugging)
     PATH = embedding_dir / dataset / model / split
-    print('loading ESM embeddings:', split)
+    print("loading ESM embeddings:", split)
 
     if mean:
-        train = torch.load(PATH / 'train_mean.pt') #data_len x seq x 1280
-        val = torch.load(PATH / 'val_mean.pt')
-        test = torch.load(PATH / 'test_mean.pt') #data_len x seq x 1280
+        train = torch.load(PATH / "train_mean.pt")  # data_len x seq x 1280
+        val = torch.load(PATH / "val_mean.pt")
+        test = torch.load(PATH / "test_mean.pt")  # data_len x seq x 1280
     else:
-        train = torch.load(PATH / 'train_aa.pt') #data_len x seq x 1280
-        val = torch.load(PATH / 'val_aa.pt')
-        test = torch.load(PATH / 'test_aa.pt') #data_len x seq x 1280
+        train = torch.load(PATH / "train_aa.pt")  # data_len x seq x 1280
+        val = torch.load(PATH / "val_aa.pt")
+        test = torch.load(PATH / "test_aa.pt")  # data_len x seq x 1280
 
-        if dataset == 'gb1' and gb1_shorten == True: #fix the sequence to be shorter
-            print('shortening gb1 to first 56 AAs')
+        if dataset == "gb1" and gb1_shorten == True:  # fix the sequence to be shorter
+            print("shortening gb1 to first 56 AAs")
             train = train[:, :56, :]
             val = val[:, :56, :]
             test = test[:, :56, :]
-    
-    if dataset == 'aav' and mut_mean == True:
+
+    if dataset == "aav" and mut_mean == True:
         train = torch.mean(train[:, 560:590, :], 1)
         val = torch.mean(val[:, 560:590, :], 1)
         test = torch.mean(test[:, 560:590, :], 1)
 
-    if dataset == 'gb1' and mut_mean == True: #positions 39, 40, 41, 54 in sequence
+    if dataset == "gb1" and mut_mean == True:  # positions 39, 40, 41, 54 in sequence
         train = torch.mean(train[:, [38, 39, 40, 53], :], 1)
         val = torch.mean(val[:, [38, 39, 40, 53], :], 1)
         test = torch.mean(test[:, [38, 39, 40, 53], :], 1)
-    
 
-    train_l = torch.load(PATH / 'train_labels.pt')
-    val_l = torch.load(PATH / 'val_labels.pt')
-    test_l = torch.load(PATH / 'test_labels.pt')
+    train_l = torch.load(PATH / "train_labels.pt")
+    val_l = torch.load(PATH / "val_labels.pt")
+    test_l = torch.load(PATH / "test_labels.pt")
 
     if flip:
-        train_l, test_l = test_l, train_l 
+        train_l, test_l = test_l, train_l
         train, test = test, train
-   
+
     train_esm_data = TensorDataset(train, train_l)
     val_esm_data = TensorDataset(val, val_l)
     test_esm_data = TensorDataset(test, test_l)
 
     max_length = test.shape[1]
 
-    print('loaded train/val/test:', len(train_esm_data), len(val_esm_data), len(test_esm_data), file = sys.stderr) 
-    
+    print(
+        "loaded train/val/test:",
+        len(train_esm_data),
+        len(val_esm_data),
+        len(test_esm_data),
+        file=sys.stderr,
+    )
+
     return train_esm_data, val_esm_data, test_esm_data, max_length
 
 
@@ -233,7 +250,7 @@ class SequenceDataset(Dataset):
             return row["sequence"], row["target"]
 
 
-class ESMSequenceDataset(Dataset): #TODO: remove?
+class ESMSequenceDataset(Dataset):  # TODO: remove?
     "special dataset class just to deal with ESM tensors"
 
     def __init__(self, emb, mask, labels):
@@ -270,9 +287,7 @@ class HugeDataset(Dataset):
 
 def negative_log_likelihood(pred_targets, pred_var, targets):
     clamped_var = torch.clamp(pred_var, min=0.00001)
-    loss = torch.log(clamped_var) / 2 + (pred_targets - targets) ** 2 / (
-        2 * clamped_var
-    )
+    loss = torch.log(clamped_var) / 2 + (pred_targets - targets) ** 2 / (2 * clamped_var)
     return torch.mean(loss)
 
 
@@ -315,9 +330,7 @@ def evidential_loss(mu, v, alpha, beta, targets, lam=1, epsilon=1e-4):
 
 def evaluate_miscalibration_area(abs_error, uncertainty):
     standard_devs = abs_error / uncertainty
-    probabilities = [
-        2 * (stats.norm.cdf(standard_dev) - 0.5) for standard_dev in standard_devs
-    ]
+    probabilities = [2 * (stats.norm.cdf(standard_dev) - 0.5) for standard_dev in standard_devs]
     sorted_probabilities = sorted(probabilities)
 
     fraction_under_thresholds = []
@@ -334,15 +347,10 @@ def evaluate_miscalibration_area(abs_error, uncertainty):
         threshold += 0.001
 
     thresholds = np.linspace(0, 1, num=1001)
-    miscalibration = [
-        np.abs(fraction_under_thresholds[i] - thresholds[i])
-        for i in range(len(thresholds))
-    ]
+    miscalibration = [np.abs(fraction_under_thresholds[i] - thresholds[i]) for i in range(len(thresholds))]
     miscalibration_area = 0
     for i in range(1, 1001):
-        miscalibration_area += (
-            np.average([miscalibration[i - 1], miscalibration[i]]) * 0.001
-        )
+        miscalibration_area += np.average([miscalibration[i - 1], miscalibration[i]]) * 0.001
 
     return {
         "fraction_under_thresholds": fraction_under_thresholds,
@@ -357,11 +365,11 @@ def evaluate_log_likelihood(error, uncertainty):
 
     for err, unc in zip(error, uncertainty):
         # Encourage small standard deviations.
-        log_likelihood -= np.log(2 * np.pi * max(0.00001, unc ** 2)) / 2
-        optimal_log_likelihood -= np.log(2 * np.pi * err ** 2) / 2
+        log_likelihood -= np.log(2 * np.pi * max(0.00001, unc**2)) / 2
+        optimal_log_likelihood -= np.log(2 * np.pi * err**2) / 2
 
         # Penalize for large error.
-        log_likelihood -= err ** 2 / (2 * max(0.00001, unc ** 2))
+        log_likelihood -= err**2 / (2 * max(0.00001, unc**2))
         optimal_log_likelihood -= 1 / 2
 
     return {
@@ -417,24 +425,14 @@ def calculate_metrics(
             df[f"preds_std ({name})"] = preds_std
             df[f"coverage ({name})"] = coverage
             df[f"width/range ({name})"] = width_range
-            rho_unc, p_rho_unc = stats.spearmanr(
-                df["residual"], df[f"preds_std ({name})"]
-            )
+            rho_unc, p_rho_unc = stats.spearmanr(df["residual"], df[f"preds_std ({name})"])
             percent_coverage = sum(df[f"coverage ({name})"]) / len(df)
-            average_width_range = df[f"width/range ({name})"].mean() / (
-                max(y_train) - min(y_train)
-            )
-            miscalibration_area_results = evaluate_miscalibration_area(
-                df["residual"], df[f"preds_std ({name})"]
-            )
+            average_width_range = df[f"width/range ({name})"].mean() / (max(y_train) - min(y_train))
+            miscalibration_area_results = evaluate_miscalibration_area(df["residual"], df[f"preds_std ({name})"])
             miscalibration_area = miscalibration_area_results["miscalibration_area"]
-            ll_results = evaluate_log_likelihood(
-                df["residual"], df[f"preds_std ({name})"]
-            )
+            ll_results = evaluate_log_likelihood(df["residual"], df[f"preds_std ({name})"])
             average_log_likelihood = ll_results["average_log_likelihood"]
-            average_optimal_log_likelihood = ll_results[
-                "average_optimal_log_likelihood"
-            ]
+            average_optimal_log_likelihood = ll_results["average_optimal_log_likelihood"]
             print(f"TEST RHO UNCERTAINTY ({name}): ", rho_unc)
             print(f"TEST RHO UNCERTAINTY P-VALUE ({name}): ", p_rho_unc)
             print(f"PERCENT COVERAGE ({name}): ", percent_coverage)
@@ -468,9 +466,7 @@ def calculate_metrics(
         rho_unc, p_rho_unc = stats.spearmanr(df["residual"], df["preds_std"])
         percent_coverage = sum(df["coverage"]) / len(df)
         average_width_range = df["width/range"].mean() / (max(y_train) - min(y_train))
-        miscalibration_area_results = evaluate_miscalibration_area(
-            df["residual"], df["preds_std"]
-        )
+        miscalibration_area_results = evaluate_miscalibration_area(df["residual"], df["preds_std"])
         miscalibration_area = miscalibration_area_results["miscalibration_area"]
         ll_results = evaluate_log_likelihood(df["residual"], df["preds_std"])
         average_log_likelihood = ll_results["average_log_likelihood"]

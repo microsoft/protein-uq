@@ -17,16 +17,19 @@ from torch.utils.data import DataLoader
 
 from models import LengthMaxPool1D, MaskedConv1d
 from train_all import split_dict
-from utils import (ASCollater, SequenceDataset, Tokenizer, calculate_metrics,
-                   load_dataset)
+from utils import (
+    ASCollater,
+    SequenceDataset,
+    Tokenizer,
+    calculate_metrics,
+    load_dataset,
+)
 
 AAINDEX_ALPHABET = "ARNDCQEGHILKMFPSTWYVXU"
 
 
 class LinearVariational(nn.Module):
-    def __init__(
-        self, in_features, out_features, loss_accumulator, n_batches, bias=True
-    ):
+    def __init__(self, in_features, out_features, loss_accumulator, n_batches, bias=True):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -37,14 +40,10 @@ class LinearVariational(nn.Module):
         if getattr(loss_accumulator, "accumulated_kl_div", None) is None:
             loss_accumulator.accumulated_kl_div = 0
 
-        self.w_mu = nn.Parameter(
-            torch.FloatTensor(in_features, out_features).normal_(mean=0, std=0.001)
-        )
+        self.w_mu = nn.Parameter(torch.FloatTensor(in_features, out_features).normal_(mean=0, std=0.001))
         # proxy for variance
         # log(1 + exp(ρ))◦ eps
-        self.w_p = nn.Parameter(
-            torch.FloatTensor(in_features, out_features).normal_(mean=-2.5, std=0.001)
-        )
+        self.w_p = nn.Parameter(torch.FloatTensor(in_features, out_features).normal_(mean=-2.5, std=0.001))
         if self.include_bias:
             self.b_mu = nn.Parameter(torch.zeros(out_features))
             self.b_p = nn.Parameter(torch.zeros(out_features))
@@ -56,9 +55,7 @@ class LinearVariational(nn.Module):
 
     def kl_divergence(self, z, mu_theta, p_theta, prior_sd=1):
         log_prior = distributions.Normal(0, prior_sd).log_prob(z)
-        log_p_q = distributions.Normal(
-            mu_theta, torch.log(1 + torch.exp(p_theta))
-        ).log_prob(z)
+        log_p_q = distributions.Normal(mu_theta, torch.log(1 + torch.exp(p_theta))).log_prob(z)
         return (log_p_q - log_prior).mean() / self.n_batches
 
     def forward(self, x):
@@ -109,13 +106,9 @@ class FluorescenceModel(nn.Module):
         super(FluorescenceModel, self).__init__()
         self.kl_loss = KL
         self.encoder = MaskedConv1d(n_tokens, input_size, kernel_size=kernel_size)
-        self.embedding = LengthMaxPool1D(
-            linear=True, in_dim=input_size, out_dim=input_size * 2
-        )
+        self.embedding = LengthMaxPool1D(linear=True, in_dim=input_size, out_dim=input_size * 2)
         output_size = 1
-        self.decoder = LinearVariational(
-            input_size * 2, output_size, self.kl_loss, n_batches
-        )
+        self.decoder = LinearVariational(input_size * 2, output_size, self.kl_loss, n_batches)
         self.n_tokens = n_tokens
         self.input_size = input_size
 
@@ -128,11 +121,7 @@ class FluorescenceModel(nn.Module):
 
     def forward(self, x, mask):
         # encoder
-        x = F.relu(
-            self.encoder(
-                x, input_mask=mask.repeat(self.n_tokens, 1, 1).permute(1, 2, 0)
-            )
-        )
+        x = F.relu(self.encoder(x, input_mask=mask.repeat(self.n_tokens, 1, 1).permute(1, 2, 0)))
         x = x * mask.repeat(self.input_size, 1, 1).permute(1, 2, 0)
         # embed
         x = self.embedding(x)
@@ -342,9 +331,7 @@ def train(args):
 
     svi_preds = []
     for _ in range(10):
-        _, mse, val_rho, tgt, pre = epoch(
-            model, False, current_step=nsteps, return_values=True
-        )
+        _, mse, val_rho, tgt, pre = epoch(model, False, current_step=nsteps, return_values=True)
         svi_preds.append(pre)
 
     svi_preds = np.array(svi_preds).squeeze()

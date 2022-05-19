@@ -16,21 +16,24 @@ from torch.utils.data import DataLoader
 
 from models import LengthMaxPool1D, MaskedConv1d
 from train_all import split_dict
-from utils import (ASCollater, SequenceDataset, Tokenizer, calculate_metrics,
-                   evidential_loss, load_dataset, negative_log_likelihood)
+from utils import (
+    ASCollater,
+    SequenceDataset,
+    Tokenizer,
+    calculate_metrics,
+    evidential_loss,
+    load_dataset,
+    negative_log_likelihood,
+)
 
 AAINDEX_ALPHABET = "ARNDCQEGHILKMFPSTWYVXU"
 
 
 class FluorescenceModel(nn.Module):
-    def __init__(
-        self, n_tokens, kernel_size, input_size, dropout, mve=False, evidential=False
-    ):
+    def __init__(self, n_tokens, kernel_size, input_size, dropout, mve=False, evidential=False):
         super(FluorescenceModel, self).__init__()
         self.encoder = MaskedConv1d(n_tokens, input_size, kernel_size=kernel_size)
-        self.embedding = LengthMaxPool1D(
-            linear=True, in_dim=input_size, out_dim=input_size * 2
-        )
+        self.embedding = LengthMaxPool1D(linear=True, in_dim=input_size, out_dim=input_size * 2)
         if mve:
             output_size = 2
         elif evidential:
@@ -44,11 +47,7 @@ class FluorescenceModel(nn.Module):
 
     def forward(self, x, mask, evidential=False):
         # encoder
-        x = F.relu(
-            self.encoder(
-                x, input_mask=mask.repeat(self.n_tokens, 1, 1).permute(1, 2, 0)
-            )
-        )
+        x = F.relu(self.encoder(x, input_mask=mask.repeat(self.n_tokens, 1, 1).permute(1, 2, 0)))
         x = x * mask.repeat(self.input_size, 1, 1).permute(1, 2, 0)
         # embed
         x = self.embedding(x)
@@ -59,19 +58,13 @@ class FluorescenceModel(nn.Module):
         if evidential:
             min_val = 1e-6
             # Split the outputs into the four distribution parameters
-            means, loglambdas, logalphas, logbetas = torch.split(
-                output, output.shape[1] // 4, dim=1
-            )
+            means, loglambdas, logalphas, logbetas = torch.split(output, output.shape[1] // 4, dim=1)
             lambdas = torch.nn.Softplus()(loglambdas) + min_val  # also called nu or v
-            alphas = (
-                torch.nn.Softplus()(logalphas) + min_val + 1
-            )  # add 1 for numerical contraints of Gamma function
+            alphas = torch.nn.Softplus()(logalphas) + min_val + 1  # add 1 for numerical contraints of Gamma function
             betas = torch.nn.Softplus()(logbetas) + min_val
 
             # Return these parameters as the output of the model
-            output = torch.stack((means, lambdas, alphas, betas), dim=2).view(
-                output.size()
-            )
+            output = torch.stack((means, lambdas, alphas, betas), dim=2).view(output.size())
         return output
 
 
@@ -157,9 +150,7 @@ def train(args):
         if args.mve:
             loss = criterion(output[:, 0], output[:, 1], np.squeeze(tgt))
         elif args.evidential:
-            loss = criterion(
-                output[:, 0], output[:, 1], output[:, 2], output[:, 3], np.squeeze(tgt)
-            )
+            loss = criterion(output[:, 0], output[:, 1], output[:, 2], output[:, 3], np.squeeze(tgt))
         else:
             loss = criterion(output, tgt)
         if train and not dropout_inference:
@@ -168,9 +159,7 @@ def train(args):
             optimizer.step()
         return loss.item(), output.detach().cpu(), tgt.detach().cpu()
 
-    def epoch(
-        model, train, current_step=0, return_values=False, dropout_inference=False
-    ):
+    def epoch(model, train, current_step=0, return_values=False, dropout_inference=False):
         start_time = datetime.now()
         if train:
             model = model.train()
@@ -188,9 +177,7 @@ def train(args):
         chunk_time = datetime.now()
         n_seen = 0
         for i, batch in enumerate(loader):
-            loss, output, tgt = step(
-                model, batch, train, dropout_inference=dropout_inference
-            )
+            loss, output, tgt = step(model, batch, train, dropout_inference=dropout_inference)
             losses.append(loss)
             outputs.append(output)
             tgts.append(tgt)
@@ -297,9 +284,7 @@ def train(args):
             )
             pre.append(list(pre_))
     else:
-        _, mse, val_rho, tgt, pre = epoch(
-            model, False, current_step=nsteps, return_values=True
-        )
+        _, mse, val_rho, tgt, pre = epoch(model, False, current_step=nsteps, return_values=True)
 
     if args.evidential:
         lambdas = pre[:, 1]  # also called nu or v
@@ -385,9 +370,7 @@ def main():
         epistemic_unc = np.squeeze(np.array(epistemic_unc))
 
         preds_mean = y_test_preds
-        preds_std = np.hstack((np.sqrt(aleatoric_unc), np.sqrt(epistemic_unc))).reshape(
-            (-1, 2)
-        )
+        preds_std = np.hstack((np.sqrt(aleatoric_unc), np.sqrt(epistemic_unc))).reshape((-1, 2))
 
     else:
         if args.mve:
@@ -422,9 +405,7 @@ def main():
         row = [args.dataset, args.algorithm_type, split_dict[args.task]]
         for metric in metrics:
             row.append(round(metric, 2))
-        with open(
-            Path.cwd() / "evals_new" / (args.dataset + "_results.csv"), "a", newline=""
-        ) as f:
+        with open(Path.cwd() / "evals_new" / (args.dataset + "_results.csv"), "a", newline="") as f:
             writer(f).writerow(row)
 
 

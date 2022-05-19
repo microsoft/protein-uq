@@ -64,9 +64,7 @@ def evaluate_esm(data_iterator, model, device, size, mean, mut_mean, SAVE_PATH):
                 o = model(inp).squeeze().cpu()
             else:
                 m = (inp[:, :, 0] != 0).long().to(device)
-                o = (
-                    model(inp, m).squeeze().cpu()
-                )  # Forward prop without storing gradients
+                o = model(inp, m).squeeze().cpu()  # Forward prop without storing gradients
 
             b = inp.shape[0]
             out[s : s + b :] = o
@@ -79,9 +77,7 @@ def evaluate_esm(data_iterator, model, device, size, mean, mut_mean, SAVE_PATH):
     if mut_mean:
         SAVE_PATH = SAVE_PATH / "mut_mean"
 
-    SAVE_PATH.mkdir(
-        parents=True, exist_ok=True
-    )  # make directory if it doesn't exist already
+    SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already
     with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:
         pickle.dump((out, labels), f)
 

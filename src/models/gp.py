@@ -10,7 +10,13 @@ from sklearn.preprocessing import StandardScaler
 
 from models import ExactGPModel
 from train_all import split_dict
-from utils import SequenceDataset, Tokenizer, calculate_metrics, load_dataset
+from utils import (
+    SequenceDataset,
+    Tokenizer,
+    calculate_metrics,
+    load_esm_dataset,
+    load_dataset,
+)
 
 np.random.seed(0)
 torch.manual_seed(1)
@@ -22,6 +28,11 @@ parser.add_argument("--scale", action="store_true")
 parser.add_argument("--gpu", type=int, nargs="+", default=[0])
 parser.add_argument("--size", type=int, default=0)
 parser.add_argument("--length", type=float, default=1.0)
+parser.add_argument("--esm", action="store_true")
+parser.add_argument("--esm_mean", action="store_true")
+parser.add_argument("--esm_mut_mean", action="store_true")
+parser.add_argument("--esm_flip", action="store_true")
+parser.add_argument("--esm_gb1_shorten", action="store_true")
 args = parser.parse_args()
 
 args.dropout = ""
@@ -29,47 +40,62 @@ args.dropout = ""
 AAINDEX_ALPHABET = "ARNDCQEGHILKMFPSTWYVXU"
 # grab data
 split = split_dict[args.task]
-train, test, _ = load_dataset(args.dataset, split + ".csv", val_split=False)
 
-ds_train = SequenceDataset(train, args.dataset)
-ds_test = SequenceDataset(test, args.dataset)
+if args.esm:
+    train, _, test, max_length = load_esm_dataset(
+        args.dataset,
+        "esm1b",
+        split,
+        args.esm_mean,
+        args.esm_mut_mean,
+        args.esm_flip,
+        args.esm_gb1_shorten,
+    )
+    X_train_enc = np.array([i[0].numpy() for i in train]).squeeze()
+    y_train = [i[1].item() for i in train]
+    X_test_enc = np.array([i[0].numpy() for i in test]).squeeze()
+    y_test = [i[1].item() for i in test]
+else:
+    train, test, _ = load_dataset(args.dataset, split + ".csv", val_split=False)
+    ds_train = SequenceDataset(train, args.dataset)
+    ds_test = SequenceDataset(test, args.dataset)
 
-print("Encoding...")
-# tokenize data
-all_train = list(ds_train)
-X_train = [i[0] for i in all_train]
-y_train = [i[1] for i in all_train]
-all_test = list(ds_test)
-X_test = [i[0] for i in all_test]
-y_test = [i[1] for i in all_test]
+    print("Encoding...")
+    # tokenize data
+    all_train = list(ds_train)
+    X_train = [i[0] for i in all_train]
+    y_train = [i[1] for i in all_train]
+    all_test = list(ds_test)
+    X_test = [i[0] for i in all_test]
+    y_test = [i[1] for i in all_test]
 
-tokenizer = Tokenizer(AAINDEX_ALPHABET)  # tokenize
-X_train = [torch.tensor(tokenizer.tokenize(i)).view(-1, 1) for i in X_train]
-X_test = [torch.tensor(tokenizer.tokenize(i)).view(-1, 1) for i in X_test]
+    tokenizer = Tokenizer(AAINDEX_ALPHABET)  # tokenize
+    X_train = [torch.tensor(tokenizer.tokenize(i)).view(-1, 1) for i in X_train]
+    X_test = [torch.tensor(tokenizer.tokenize(i)).view(-1, 1) for i in X_test]
 
-# padding
-maxlen_train = max([len(i) for i in X_train])
-maxlen_test = max([len(i) for i in X_test])
-maxlen = max([maxlen_train, maxlen_test])
-# pad_tok = alphabet.index(PAD)
+    # padding
+    maxlen_train = max([len(i) for i in X_train])
+    maxlen_test = max([len(i) for i in X_test])
+    maxlen = max([maxlen_train, maxlen_test])
+    # pad_tok = alphabet.index(PAD)
 
-X_train = [F.pad(i, (0, 0, 0, maxlen - i.shape[0]), "constant", 0.0) for i in X_train]
-X_train_enc = []  # ohe
-for i in X_train:
-    i_onehot = torch.FloatTensor(maxlen, len(AAINDEX_ALPHABET))
-    i_onehot.zero_()
-    i_onehot.scatter_(1, i, 1)
-    X_train_enc.append(i_onehot)
-X_train_enc = np.array([np.array(i.view(-1)) for i in X_train_enc])  # flatten
+    X_train = [F.pad(i, (0, 0, 0, maxlen - i.shape[0]), "constant", 0.0) for i in X_train]
+    X_train_enc = []  # ohe
+    for i in X_train:
+        i_onehot = torch.FloatTensor(maxlen, len(AAINDEX_ALPHABET))
+        i_onehot.zero_()
+        i_onehot.scatter_(1, i, 1)
+        X_train_enc.append(i_onehot)
+    X_train_enc = np.array([np.array(i.view(-1)) for i in X_train_enc])  # flatten
 
-X_test = [F.pad(i, (0, 0, 0, maxlen - i.shape[0]), "constant", 0.0) for i in X_test]
-X_test_enc = []  # ohe
-for i in X_test:
-    i_onehot = torch.FloatTensor(maxlen, len(AAINDEX_ALPHABET))
-    i_onehot.zero_()
-    i_onehot.scatter_(1, i, 1)
-    X_test_enc.append(i_onehot)
-X_test_enc = np.array([np.array(i.view(-1)) for i in X_test_enc])  # flatten
+    X_test = [F.pad(i, (0, 0, 0, maxlen - i.shape[0]), "constant", 0.0) for i in X_test]
+    X_test_enc = []  # ohe
+    for i in X_test:
+        i_onehot = torch.FloatTensor(maxlen, len(AAINDEX_ALPHABET))
+        i_onehot.zero_()
+        i_onehot.scatter_(1, i, 1)
+        X_test_enc.append(i_onehot)
+    X_test_enc = np.array([np.array(i.view(-1)) for i in X_test_enc])  # flatten
 
 
 # scale X
@@ -97,9 +123,7 @@ model.train()
 likelihood.train()
 
 # Use the adam optimizer
-optimizer = torch.optim.Adam(
-    model.parameters(), lr=0.1
-)  # Includes GaussianLikelihood parameters
+optimizer = torch.optim.Adam(model.parameters(), lr=0.1)  # Includes GaussianLikelihood parameters
 
 # "Loss" for GPs - the marginal log likelihood
 mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
@@ -138,9 +162,7 @@ likelihood.eval()
 
 # Test points are regularly spaced along [0,1]
 # Make predictions by feeding model through likelihood
-with torch.no_grad(), gpytorch.settings.fast_pred_var(), gpytorch.beta_features.checkpoint_kernel(
-    args.size
-):
+with torch.no_grad(), gpytorch.settings.fast_pred_var(), gpytorch.beta_features.checkpoint_kernel(args.size):
     observed_pred = likelihood(model(test_x.to(device)))
     preds_mean = observed_pred.mean.cpu()
     (
@@ -176,7 +198,5 @@ for metric in metrics:
         row.append(metric)
     else:
         row.append(round(metric, 2))
-with open(
-    Path.cwd() / "evals_new" / (args.dataset + "_results.csv"), "a", newline=""
-) as f:
+with open(Path.cwd() / "evals_new" / (args.dataset + "_results.csv"), "a", newline="") as f:
     writer(f).writerow(row)

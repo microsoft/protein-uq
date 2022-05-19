@@ -36,9 +36,7 @@ split_dict = {
 def create_parser():
     parser = argparse.ArgumentParser(description="train esm")
     parser.add_argument("split", type=str)
-    parser.add_argument(
-        "model", choices=["ridge", "cnn", "esm1b", "esm1v", "esm_rand"], type=str
-    )
+    parser.add_argument("model", choices=["ridge", "cnn", "esm1b", "esm1v", "esm_rand"], type=str)
     parser.add_argument("gpu", type=str)
     parser.add_argument("--mean", action="store_true")
     parser.add_argument("--mut_mean", action="store_true")
@@ -50,9 +48,7 @@ def create_parser():
     return parser
 
 
-def train_eval(
-    dataset, model, split, device, mean, mut_mean, samples, index, batch_size, flip, lr
-):
+def train_eval(dataset, model, split, device, mean, mut_mean, samples, index, batch_size, flip, lr):
     # could get utils to output iterators directly, input batch size?
     if model.startswith("esm"):  # if training an esm model:
 
@@ -121,9 +117,7 @@ def train_eval(
     print("train stats: Spearman: %.2f MSE: %.2f " % (train_rho, train_mse))
     print("test stats: Spearman: %.2f MSE: %.2f " % (test_rho, test_mse))
 
-    with open(
-        Path.cwd() / "evals_new" / (dataset + "_results.csv"), "a", newline=""
-    ) as f:
+    with open(Path.cwd() / "evals_new" / (dataset + "_results.csv"), "a", newline="") as f:
         if args.mean:
             model += "_mean"
         if args.mut_mean:
@@ -182,9 +176,7 @@ def main(args):
             samples = {}
             for i in range(100):
                 train = train.reset_index(drop=True)
-                samples[i] = train.index[
-                    train["random_sample"] == "S" + str(i + 1)
-                ].to_numpy()
+                samples[i] = train.index[train["random_sample"] == "S" + str(i + 1)].to_numpy()
 
             # then, run training and evaluation on every random sample
             for i in range(100):

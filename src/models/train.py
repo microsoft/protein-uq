@@ -2,9 +2,7 @@ import numpy as np
 import torch
 
 
-def train_esm(
-    train_iterator, val_iterator, model, device, criterion, optimizer, epoch_num, mean
-):
+def train_esm(train_iterator, val_iterator, model, device, criterion, optimizer, epoch_num, mean):
 
     val_loss = []
 
@@ -50,10 +48,7 @@ def train_esm(
             val_loss_epoch = np.mean(val_loss_epochs)
             val_loss.append(round(val_loss_epoch, 3))
 
-        print(
-            "epoch: %d loss: %.3f val loss: %.3f"
-            % (epoch + 1, loss.item(), val_loss_epoch)
-        )
+        print("epoch: %d loss: %.3f val loss: %.3f" % (epoch + 1, loss.item(), val_loss_epoch))
 
         # evalutate whether validation loss is dropping; if not, stop
         if epoch > 21:
