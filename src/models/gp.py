@@ -181,6 +181,17 @@ test_x = test_x.cpu()
 
 print("Calculating metrics...")
 algorithm_type = "GPcontinuous"
+if args.esm:
+    algorithm_type += "_esm1b"
+    if args.esm_mean:
+        algorithm_type += "_mean"
+    if args.esm_mut_mean:
+        algorithm_type += "_mutmean"
+    if args.esm_flip:
+        algorithm_type += "_flip"
+    if args.esm_gb1_shorten:
+        algorithm_type += "_gb1shorten"
+
 metrics = calculate_metrics(
     np.array(y_test),
     preds_mean.numpy(),
