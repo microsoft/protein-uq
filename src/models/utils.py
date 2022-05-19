@@ -144,8 +144,8 @@ def get_data(
 def load_dataset(dataset, split, val_split=True):  # TODO: get updated version of function from FLIP
     """returns dataframe of train, (val), test sets, with max_length param"""
 
-    # datadir = "../../data/" + dataset + "/splits/"
-    datadir = "/home/kpg/microsoft/protein-uq/data/" + dataset + "/splits/"  # TODO: fix path (this one for debugging)
+    datadir = "../../data/" + dataset + "/splits/"
+    # datadir = "/home/kpg/microsoft/protein-uq/data/" + dataset + "/splits/"  # TODO: fix path (this one for debugging)
 
     path = datadir + split
     print("reading dataset:", split)
@@ -173,8 +173,8 @@ def load_esm_dataset(
     dataset, model, split, mean, mut_mean, flip, gb1_shorten=False
 ):  # TODO: get updated version of function from FLIP
 
-    # embedding_dir = Path("../../../FLIP/baselines/embeddings/")  # TODO: change to path in this repo / not hard-coded
-    embedding_dir = Path("/home/kpg/microsoft/FLIP/baselines/embeddings/")  # TODO: fix path (this one for debugging)
+    embedding_dir = Path("../../../FLIP/baselines/embeddings/")  # TODO: change to path in this repo / not hard-coded
+    # embedding_dir = Path("/home/kpg/microsoft/FLIP/baselines/embeddings/")  # TODO: fix path (this one for debugging)
     PATH = embedding_dir / dataset / model / split
     print("loading ESM embeddings:", split)
 
