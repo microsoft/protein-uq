@@ -41,23 +41,8 @@ if __name__ == '__main__':
             columns=["Trial", "Train Data Ratio", "Score", "Uncertainty", "Entropy"])
 
         ### Load the data
-        ## Atomistic network
-        if args.atomistic:
-            # Copy atomistic db to a temp folder
-            if args.slurm_job and os.environ.get("TMPDIR") is not None:
-                tmp_dir = os.environ.get("TMPDIR")
-                _, file_name = os.path.split(args.data_path)
-                old_loc = args.data_path
-                new_loc = os.path.join(tmp_dir, file_name)
-                shutil.copy2(args.data_path, new_loc)
-                args.data_path = new_loc
-                clean_up= lambda : os.remove(new_loc)
-
-            (all_train_data, val_data, test_data), features_scaler, scaler = \
-                get_atomistic_splits(args.data_path, args, logger)
-        else:
-            (all_train_data, val_data, test_data), features_scaler, scaler = \
-                get_dataset_splits(args.data_path, args, logger)
+        (all_train_data, val_data, test_data), features_scaler, scaler = \
+            get_dataset_splits(args.data_path, args, logger)
 
         ### Define active learning step variables and subsample the tasks
         n_total = len(all_train_data)
@@ -212,7 +197,7 @@ if __name__ == '__main__':
                 ###
 
 
-                ### Evaluate mae performmance
+                ### Evaluate mae performance
                 args_other = deepcopy(args)
                 args_other.metric = "mae" if args.metric == "rmse" else "rmse"
                 if args.confidence:
