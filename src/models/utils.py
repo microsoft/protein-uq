@@ -12,28 +12,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset, TensorDataset
 
-vocab = [
-    "A",
-    "C",
-    "D",
-    "E",
-    "F",
-    "G",
-    "H",
-    "I",
-    "K",
-    "L",
-    "M",
-    "N",
-    "P",
-    "Q",
-    "R",
-    "S",
-    "T",
-    "V",
-    "W",
-    "Y",
-]
+vocab = "ARNDCQEGHILKMFPSTWYVXU"
 pad_index = len(vocab)  # pad index is 20
 
 

@@ -9,13 +9,8 @@ from sklearn.linear_model import BayesianRidge
 from sklearn.preprocessing import StandardScaler
 
 from train_all import split_dict
-from utils import (
-    SequenceDataset,
-    Tokenizer,
-    calculate_metrics,
-    load_dataset,
-    load_esm_dataset,
-)
+from utils import (SequenceDataset, Tokenizer, calculate_metrics, load_dataset,
+                   load_esm_dataset, vocab)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("dataset", type=str, help="file path to data directory")
@@ -36,7 +31,6 @@ args = parser.parse_args()
 
 args.dropout = ""
 
-AAINDEX_ALPHABET = "ARNDCQEGHILKMFPSTWYVXU"
 # grab data
 split = split_dict[args.task]
 
@@ -68,7 +62,7 @@ else:
     X_test = [i[0] for i in all_test]
     y_test = [i[1] for i in all_test]
 
-    tokenizer = Tokenizer(AAINDEX_ALPHABET)  # tokenize
+    tokenizer = Tokenizer(vocab)  # tokenize
     X_train = [torch.tensor(tokenizer.tokenize(i)).view(-1, 1) for i in X_train]
     X_test = [torch.tensor(tokenizer.tokenize(i)).view(-1, 1) for i in X_test]
 
@@ -81,7 +75,7 @@ else:
     X_train = [F.pad(i, (0, 0, 0, maxlen - i.shape[0]), "constant", 0.0) for i in X_train]
     X_train_enc = []  # ohe
     for i in X_train:
-        i_onehot = torch.FloatTensor(maxlen, len(AAINDEX_ALPHABET))
+        i_onehot = torch.FloatTensor(maxlen, len(vocab))
         i_onehot.zero_()
         i_onehot.scatter_(1, i, 1)
         X_train_enc.append(i_onehot)
@@ -90,7 +84,7 @@ else:
     X_test = [F.pad(i, (0, 0, 0, maxlen - i.shape[0]), "constant", 0.0) for i in X_test]
     X_test_enc = []  # ohe
     for i in X_test:
-        i_onehot = torch.FloatTensor(maxlen, len(AAINDEX_ALPHABET))
+        i_onehot = torch.FloatTensor(maxlen, len(vocab))
         i_onehot.zero_()
         i_onehot.scatter_(1, i, 1)
         X_test_enc.append(i_onehot)

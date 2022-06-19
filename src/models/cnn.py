@@ -24,9 +24,8 @@ from utils import (
     evidential_loss,
     load_dataset,
     negative_log_likelihood,
+    vocab,
 )
-
-AAINDEX_ALPHABET = "ARNDCQEGHILKMFPSTWYVXU"
 
 
 class FluorescenceModel(nn.Module):
@@ -74,7 +73,7 @@ def train(args):
     batch_size = 256
     epochs = 1000
     device = torch.device("cuda:%d" % args.gpu)
-    alphabet = AAINDEX_ALPHABET
+    alphabet = vocab
     if args.dataset == "meltome":
         alphabet += "XU"
         batch_size = 32
