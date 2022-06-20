@@ -130,8 +130,8 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH):
 
 
 def evaluate_ridge(X, y, model, SAVE_PATH):
-    out = model.predict(X)
-    rho, mse = regression_eval(predicted=out, labels=y, SAVE_PATH=SAVE_PATH)
+    preds_mean, preds_std = model.predict(X, return_std=True)
+    rho, mse = regression_eval(predicted=preds_mean, labels=y, SAVE_PATH=SAVE_PATH)
     return rho, mse
 
 
