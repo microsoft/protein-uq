@@ -10,6 +10,7 @@ import pickle
 from pathlib import Path
 
 import torch
+import gpytorch
 
 
 def concat_tensor(tensor_list, keep_tensor=False):
@@ -134,7 +135,21 @@ def evaluate_ridge(X, y, model, SAVE_PATH):
     return rho, mse
 
 
-def evaluate_gp(X, y, model, SAVE_PATH):
-    out = model.predict(X)
-    rho, mse = regression_eval(predicted=out, labels=y, SAVE_PATH=SAVE_PATH)
+def evaluate_gp(X, y, model, likelihood, device, size, SAVE_PATH):
+    # Get into evaluation (predictive posterior) mode
+    model.eval()
+    likelihood.eval()
+
+    # Test points are regularly spaced along [0,1]
+    # Make predictions by feeding model through likelihood
+    with torch.no_grad(), gpytorch.settings.fast_pred_var(), gpytorch.beta_features.checkpoint_kernel(size):
+        observed_pred = likelihood(model(X.to(device)))
+        preds_mean = observed_pred.mean.cpu()
+        lower, upper = observed_pred.confidence_region()  # 2 st dev above and below mean
+
+    lower = lower.cpu()
+    upper = upper.cpu()
+    preds_std = (upper - preds_mean) / 2
+
+    rho, mse = regression_eval(predicted=preds_mean, labels=y, SAVE_PATH=SAVE_PATH)
     return rho, mse

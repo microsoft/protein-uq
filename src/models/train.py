@@ -156,9 +156,7 @@ def train_ridge(X_train, y_train, model):
     return model, iterations
 
 
-def train_gp(X_train, y_train, model, device, length, size):
-    # initialize likelihood and model
-    likelihood = gpytorch.likelihoods.GaussianLikelihood()
+def train_gp(X_train, y_train, model, likelihood, device, length, size):
     model.covar_module.module.base_kernel.lengthscale *= length
     X_train = X_train.to(device)
     y_train = y_train.to(device)

@@ -148,8 +148,6 @@ def train_eval(
 
     if model in ["ridge", "gp"]:
         lr = kernel_size = input_size = dropout = ""  # get rid of unused variables
-        np.random.seed(0)
-        torch.manual_seed(1)
 
     # train and evaluate models
     if model == "ridge":
@@ -170,12 +168,12 @@ def train_eval(
         train_seq, train_target = torch.tensor(train_seq).float(), torch.tensor(train_target).float()
         test_seq, test_target = torch.tensor(test_seq).float(), torch.tensor(test_target).float()
         likelihood = gpytorch.likelihoods.GaussianLikelihood()
-        model = ExactGPModel(train_seq, train_target, likelihood, device_ids=gpu)
-        model.covar_module.module.base_kernel.lengthscale *= length
-        gp_trained, _ = train_gp(train_seq, train_target, model, device, length, size)
+        gp_model = ExactGPModel(train_seq, train_target, likelihood, device_ids=gpu)
+        gp_model.covar_module.module.base_kernel.lengthscale *= length
+        gp_trained, _ = train_gp(train_seq, train_target, gp_model, likelihood, device, length, size)
 
-        train_rho, train_mse = evaluate_gp(train_seq, train_target, lr_trained, EVAL_PATH / "train")  # evaluate on train
-        test_rho, test_mse = evaluate_gp(test_seq, test_target, lr_trained, EVAL_PATH / "test")  # evaluate on test
+        train_rho, train_mse = evaluate_gp(train_seq, train_target, gp_trained, likelihood, device, size, EVAL_PATH / "train")  # evaluate on train
+        test_rho, test_mse = evaluate_gp(test_seq, test_target, gp_trained, likelihood, device, size, EVAL_PATH / "test")  # evaluate on test
 
     if model == "cnn":
         lr = alpha = ""  # get rid of unused variables
@@ -246,6 +244,8 @@ def train_eval(
     print("train stats: Spearman: %.2f MSE: %.2f " % (train_rho, train_mse))
     print("test stats: Spearman: %.2f MSE: %.2f " % (test_rho, test_mse))
 
+    # TODO: write out prediction files for evaluation; make parity plots and learning curves
+
     with open(results_dir / (dataset + "_results.csv"), "a", newline="") as f:
         writer(f).writerow(
             [
@@ -270,8 +270,8 @@ def main(args):
 
     print("dataset: {0} model: {1} split: {2} \n".format(dataset, args.model, split))
 
-    random.seed(10)
-    torch.manual_seed(10)
+    random.seed(0)
+    torch.manual_seed(0)
     train_eval(
         dataset,
         args.model,
