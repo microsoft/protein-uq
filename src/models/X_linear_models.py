@@ -9,8 +9,7 @@ from sklearn.linear_model import BayesianRidge
 from sklearn.preprocessing import StandardScaler
 
 from train_all import split_dict
-from utils import (SequenceDataset, Tokenizer, calculate_metrics, load_dataset,
-                   load_esm_dataset, vocab)
+from utils import SequenceDataset, Tokenizer, calculate_metrics, load_dataset, load_esm_dataset, vocab
 
 parser = argparse.ArgumentParser()
 parser.add_argument("dataset", type=str, help="file path to data directory")

@@ -1,23 +1,21 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+import sys
 import re
 from pathlib import Path
-from typing import Any, List
-import sys
-
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from scipy import stats
+from filepaths import DATA_DIR, EMBEDDING_DIR
+from typing import List, Any
 
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset, TensorDataset
 
 vocab = "ARNDCQEGHILKMFPSTWYVXU"
-pad_index = len(vocab)  # pad index is 20
+pad_index = len(vocab)
 
 
 class Tokenizer(object):
-    """Convert between strings and their one-hot representations."""
+    """convert between strings and their one-hot representations"""
 
     def __init__(self, alphabet: str):
         self.alphabet = alphabet
@@ -70,6 +68,24 @@ class ASCollater(object):
         return padded, y, mask
 
 
+def ridge_one_hot_encoding(s, length, vocab=vocab):
+    """one hot encodes seqs for ridge regression"""
+    # ll_train = list(ds)
+    # seq = [i[0] for i in all_train]
+    # target = [i[1] for i in all_train]
+    # tokenizer = Tokenizer(vocab) # tokenize
+    # s = [torch.tensor(tokenizer.tokenize(i)).view(-1, 1) for i in s]
+    # s = [F.pad(i, (0, 0, 0, length - i.shape[0]), "constant", 0.) for i in s]
+    s_enc = []  # one
+    for i in s:
+        i_onehot = torch.FloatTensor(length, len(vocab))
+        i_onehot.zero_()
+        i_onehot.scatter_(1, i, 1)
+        s_enc.append(i_onehot)
+    s_enc = np.array([np.array(i.view(-1)) for i in s_enc])  # flatten
+    return s_enc
+
+
 def encode_pad_seqs(s, length, vocab=vocab):
     """pads all sequences, converts AA string to np.array of indices"""
     aa_dict = {k: v for v, k in enumerate(vocab)}
@@ -90,14 +106,7 @@ def one_hot_pad_seqs(s, length, vocab=vocab):
     return embedded
 
 
-def get_data(
-    df,
-    max_length,
-    encode_pad=True,
-    zip_dataset=True,
-    reverse_seq_target=False,
-    one_hots=False,
-):
+def get_data(df, max_length, encode_pad=True, zip_dataset=True, reverse_seq_target=False, one_hots=False):
     """returns encoded and padded sequences with targets"""
     target = df.target.values.tolist()
     seq = df.sequence.values.tolist()
@@ -120,23 +129,26 @@ def get_data(
         return torch.FloatTensor(seq), torch.FloatTensor(target)
 
 
-def load_dataset(dataset, split, val_split=True):  # TODO: get updated version of function from FLIP
+def load_dataset(dataset, split, val_split=True, gb1_shorten=False):
     """returns dataframe of train, (val), test sets, with max_length param"""
 
-    datadir = "../../data/" + dataset + "/splits/"
-    # datadir = "/home/kpg/microsoft/protein-uq/data/" + dataset + "/splits/"  # TODO: fix path (this one for debugging)
+    datadir = Path(DATA_DIR)
 
-    path = datadir + split
+    PATH = datadir / dataset / "splits" / split
     print("reading dataset:", split)
 
-    df = pd.read_csv(path)
+    df = pd.read_csv(PATH)
 
-    df.sequence.apply(lambda s: re.sub(r"[^A-Z]", "", s.upper()))  # remove special characters
+    if dataset == "gb1" and gb1_shorten == True:
+        print("shortening gb1 to first 56 AAs")
+        df.sequence = df.sequence.apply(lambda s: s[:56])
+
+    df.sequence = df.sequence.apply(lambda s: re.sub(r"[^A-Z]", "", s.upper()))  # remove special characters
     max_length = max(df.sequence.str.len())
 
-    if val_split is True:
+    if val_split == True:
         test = df[df.set == "test"]
-        train = df[(df.set == "train") & (df.validation.isnull())]
+        train = df[(df.set == "train") & (df.validation.isna())]  # change False for meltome
         val = df[df.validation == True]
 
         print("loaded train/val/test:", len(train), len(val), len(test))
@@ -148,12 +160,9 @@ def load_dataset(dataset, split, val_split=True):  # TODO: get updated version o
         return train, test, max_length
 
 
-def load_esm_dataset(
-    dataset, model, split, mean, mut_mean, flip, gb1_shorten=False
-):  # TODO: get updated version of function from FLIP
+def load_esm_dataset(dataset, model, split, mean, mut_mean, flip, gb1_shorten=False):
 
-    embedding_dir = Path("../../../FLIP/baselines/embeddings/")  # TODO: change to path in this repo / not hard-coded
-    # embedding_dir = Path("/home/kpg/microsoft/FLIP/baselines/embeddings/")  # TODO: fix path (this one for debugging)
+    embedding_dir = Path(EMBEDDING_DIR)
     PATH = embedding_dir / dataset / model / split
     print("loading ESM embeddings:", split)
 
@@ -196,40 +205,24 @@ def load_esm_dataset(
 
     max_length = test.shape[1]
 
-    print(
-        "loaded train/val/test:",
-        len(train_esm_data),
-        len(val_esm_data),
-        len(test_esm_data),
-        file=sys.stderr,
-    )
+    print("loaded train/val/test:", len(train_esm_data), len(val_esm_data), len(test_esm_data), file=sys.stderr)
 
     return train_esm_data, val_esm_data, test_esm_data, max_length
 
 
 class SequenceDataset(Dataset):
-    def __init__(self, data, dataset_name):
+    def __init__(self, data):
         self.data = data
-        self.dataset_name = dataset_name
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, index):
         row = self.data.iloc[index]
-        if self.dataset_name == "aav":
-            return (
-                row["sequence"][560:604],
-                row["target"],
-            )  # only look at part of sequence that changes
-        elif self.dataset_name == "meltome":
-            max_len = 1024  # truncate to first 1024 characters
-            return row["sequence"][:max_len], row["target"]
-        else:
-            return row["sequence"], row["target"]
+        return row["sequence"], row["target"]
 
 
-class ESMSequenceDataset(Dataset):  # TODO: remove?
+class ESMSequenceDataset(Dataset):
     "special dataset class just to deal with ESM tensors"
 
     def __init__(self, emb, mask, labels):
@@ -262,220 +255,3 @@ class HugeDataset(Dataset):
             e = torch.load(self.path + str(index) + ".pt")["representations"][33]
 
         return e, self.label[index]
-
-
-def negative_log_likelihood(pred_targets, pred_var, targets):
-    clamped_var = torch.clamp(pred_var, min=0.00001)
-    loss = torch.log(clamped_var) / 2 + (pred_targets - targets) ** 2 / (2 * clamped_var)
-    return torch.mean(loss)
-
-
-def evidential_loss(mu, v, alpha, beta, targets, lam=1, epsilon=1e-4):
-    """
-    Use Deep Evidential Regression negative log likelihood loss + evidential
-        regularizer
-
-    :mu: pred mean parameter for NIG
-    :v: pred lam parameter for NIG
-    :alpha: predicted parameter for NIG
-    :beta: Predicted parmaeter for NIG
-    :targets: Outputs to predict
-
-    :return: Loss
-    """
-    # Calculate NLL loss
-    twoBlambda = 2 * beta * (1 + v)
-    nll = (
-        0.5 * torch.log(np.pi / v)
-        - alpha * torch.log(twoBlambda)
-        + (alpha + 0.5) * torch.log(v * (targets - mu) ** 2 + twoBlambda)
-        + torch.lgamma(alpha)
-        - torch.lgamma(alpha + 0.5)
-    )
-
-    L_NLL = nll  # torch.mean(nll, dim=-1)
-
-    # Calculate regularizer based on absolute error of prediction
-    error = torch.abs((targets - mu))
-    reg = error * (2 * v + alpha)
-    L_REG = reg  # torch.mean(reg, dim=-1)
-
-    # Loss = L_NLL + L_REG
-    # TODO If we want to optimize the dual- of the objective use the line below:
-    loss = L_NLL + lam * (L_REG - epsilon)
-
-    return torch.mean(loss)
-
-
-def evaluate_miscalibration_area(abs_error, uncertainty):
-    standard_devs = abs_error / uncertainty
-    probabilities = [2 * (stats.norm.cdf(standard_dev) - 0.5) for standard_dev in standard_devs]
-    sorted_probabilities = sorted(probabilities)
-
-    fraction_under_thresholds = []
-    threshold = 0
-
-    for i in range(len(sorted_probabilities)):
-        while sorted_probabilities[i] > threshold:
-            fraction_under_thresholds.append(i / len(sorted_probabilities))
-            threshold += 0.001
-
-    # Condition used 1.0001 to catch floating point errors.
-    while threshold < 1.0001:
-        fraction_under_thresholds.append(1)
-        threshold += 0.001
-
-    thresholds = np.linspace(0, 1, num=1001)
-    miscalibration = [np.abs(fraction_under_thresholds[i] - thresholds[i]) for i in range(len(thresholds))]
-    miscalibration_area = 0
-    for i in range(1, 1001):
-        miscalibration_area += np.average([miscalibration[i - 1], miscalibration[i]]) * 0.001
-
-    return {
-        "fraction_under_thresholds": fraction_under_thresholds,
-        "thresholds": thresholds,
-        "miscalibration_area": miscalibration_area,
-    }
-
-
-def evaluate_log_likelihood(error, uncertainty):
-    log_likelihood = 0
-    optimal_log_likelihood = 0
-
-    for err, unc in zip(error, uncertainty):
-        # Encourage small standard deviations.
-        log_likelihood -= np.log(2 * np.pi * max(0.00001, unc**2)) / 2
-        optimal_log_likelihood -= np.log(2 * np.pi * err**2) / 2
-
-        # Penalize for large error.
-        log_likelihood -= err**2 / (2 * max(0.00001, unc**2))
-        optimal_log_likelihood -= 1 / 2
-
-    return {
-        "log_likelihood": log_likelihood,
-        "optimal_log_likelihood": optimal_log_likelihood,
-        "average_log_likelihood": log_likelihood / len(error),
-        "average_optimal_log_likelihood": optimal_log_likelihood / len(error),
-    }
-
-
-def calculate_metrics(
-    y_test,
-    preds_mean,
-    preds_std,
-    args,
-    split,
-    y_train,
-    algorithm_type,
-    evidential=False,
-    out_fpath=None,
-):
-    if out_fpath is None:
-        out_fpath = Path.cwd()
-
-    rho = stats.spearmanr(y_test, preds_mean).correlation
-    rmse = mean_squared_error(y_test, preds_mean, squared=False)
-    mae = mean_absolute_error(y_test, preds_mean)
-    r2 = r2_score(y_test, preds_mean)
-
-    print("TEST RHO: ", rho)
-    print("TEST RMSE: ", rmse)
-    print("TEST MAE: ", mae)
-    print("TEST R2: ", r2)
-
-    residual = np.abs(y_test - preds_mean)
-
-    df = pd.DataFrame()
-    df["y_test"] = y_test
-    df["preds_mean"] = preds_mean
-    df["residual"] = residual
-
-    if evidential:
-        aleatoric_unc = preds_std[:, 0]
-        epistemic_unc = preds_std[:, 1]
-        total_unc = aleatoric_unc + epistemic_unc
-        metrics = [rho, rmse, mae, r2]
-        for name, preds_std in zip(
-            ["aleatoric", "epistemic", "total"],
-            [aleatoric_unc, epistemic_unc, total_unc],
-        ):
-            coverage = residual < 2 * preds_std
-            width_range = 4 * preds_std / (max(y_train) - min(y_train))
-            df[f"preds_std ({name})"] = preds_std
-            df[f"coverage ({name})"] = coverage
-            df[f"width/range ({name})"] = width_range
-            rho_unc, p_rho_unc = stats.spearmanr(df["residual"], df[f"preds_std ({name})"])
-            percent_coverage = sum(df[f"coverage ({name})"]) / len(df)
-            average_width_range = df[f"width/range ({name})"].mean() / (max(y_train) - min(y_train))
-            miscalibration_area_results = evaluate_miscalibration_area(df["residual"], df[f"preds_std ({name})"])
-            miscalibration_area = miscalibration_area_results["miscalibration_area"]
-            ll_results = evaluate_log_likelihood(df["residual"], df[f"preds_std ({name})"])
-            average_log_likelihood = ll_results["average_log_likelihood"]
-            average_optimal_log_likelihood = ll_results["average_optimal_log_likelihood"]
-            print(f"TEST RHO UNCERTAINTY ({name}): ", rho_unc)
-            print(f"TEST RHO UNCERTAINTY P-VALUE ({name}): ", p_rho_unc)
-            print(f"PERCENT COVERAGE ({name}): ", percent_coverage)
-            print(f"AVERAGE WIDTH / TRAINING SET RANGE ({name}): ", average_width_range)
-            print(f"MISCALIBRATION AREA ({name}): ", miscalibration_area)
-            print(f"AVERAGE NLL ({name}): ", average_log_likelihood)
-            print(f"AVERAGE OPTIMAL NLL ({name}): ", average_optimal_log_likelihood)
-            print(
-                f"NLL / NLL_OPT ({name}):",
-                average_log_likelihood / average_optimal_log_likelihood,
-            )
-            metrics.extend(
-                [
-                    rho_unc,
-                    p_rho_unc,
-                    percent_coverage,
-                    average_width_range,
-                    miscalibration_area,
-                    average_log_likelihood,
-                    average_optimal_log_likelihood,
-                    average_log_likelihood / average_optimal_log_likelihood,
-                    args.dropout,
-                ]
-            )
-    else:
-        coverage = residual < 2 * preds_std
-        width_range = 4 * preds_std / (max(y_train) - min(y_train))
-        df["preds_std"] = preds_std
-        df["coverage"] = coverage
-        df["width/range"] = width_range
-        rho_unc, p_rho_unc = stats.spearmanr(df["residual"], df["preds_std"])
-        percent_coverage = sum(df["coverage"]) / len(df)
-        average_width_range = df["width/range"].mean() / (max(y_train) - min(y_train))
-        miscalibration_area_results = evaluate_miscalibration_area(df["residual"], df["preds_std"])
-        miscalibration_area = miscalibration_area_results["miscalibration_area"]
-        ll_results = evaluate_log_likelihood(df["residual"], df["preds_std"])
-        average_log_likelihood = ll_results["average_log_likelihood"]
-        average_optimal_log_likelihood = ll_results["average_optimal_log_likelihood"]
-        print("TEST RHO UNCERTAINTY: ", rho_unc)
-        print("TEST RHO UNCERTAINTY P-VALUE: ", p_rho_unc)
-        print("PERCENT COVERAGE: ", percent_coverage)
-        print("AVERAGE WIDTH / TRAINING SET RANGE: ", average_width_range)
-        print("MISCALIBRATION AREA: ", miscalibration_area)
-        print("AVERAGE NLL: ", average_log_likelihood)
-        print("AVERAGE OPTIMAL NLL: ", average_optimal_log_likelihood)
-        print("NLL / NLL_OPT:", average_log_likelihood / average_optimal_log_likelihood)
-        metrics = [
-            rho,
-            rmse,
-            mae,
-            r2,
-            rho_unc,
-            p_rho_unc,
-            percent_coverage,
-            average_width_range,
-            miscalibration_area,
-            average_log_likelihood,
-            average_optimal_log_likelihood,
-            average_log_likelihood / average_optimal_log_likelihood,
-        ]
-
-    df.to_csv(
-        f"{out_fpath}/evals_new/{args.dataset}_{algorithm_type}_{split}_test_preds.csv",
-        index=False,
-    )
-
-    return metrics

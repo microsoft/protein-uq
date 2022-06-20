@@ -10,8 +10,7 @@ from sklearn.preprocessing import StandardScaler
 
 from models import ExactGPModel
 from train_all import split_dict
-from utils import (SequenceDataset, Tokenizer, calculate_metrics, load_dataset,
-                   load_esm_dataset, vocab)
+from utils import SequenceDataset, Tokenizer, calculate_metrics, load_dataset, load_esm_dataset, vocab
 
 np.random.seed(0)
 torch.manual_seed(1)

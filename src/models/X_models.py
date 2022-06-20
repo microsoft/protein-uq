@@ -1,14 +1,9 @@
-import sys
-
-from filepaths import SEQ_MODELS
-sys.path.append(SEQ_MODELS)
-from sequence_models.structure import Attention1d
-
 import gpytorch
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from sklearn.linear_model import BayesianRidge
+
+from sequence_models.structure import Attention1d
 
 
 class ESMAttention1d(nn.Module):
@@ -77,7 +72,14 @@ class MaskedConv1d(nn.Conv1d):
         """
         padding = dilation * (kernel_size - 1) // 2
         super().__init__(
-            in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, groups=groups, bias=bias, padding=padding
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride=stride,
+            dilation=dilation,
+            groups=groups,
+            bias=bias,
+            padding=padding,
         )
 
     def forward(self, x, input_mask=None):
@@ -100,28 +102,6 @@ class LengthMaxPool1D(nn.Module):
         return x
 
 
-class FluorescenceModel(nn.Module):
-    def __init__(self, n_tokens, kernel_size, input_size, dropout):
-        super(FluorescenceModel, self).__init__()
-        self.encoder = MaskedConv1d(n_tokens, input_size, kernel_size=kernel_size)
-        self.embedding = LengthMaxPool1D(linear=True, in_dim=input_size, out_dim=input_size * 2)
-        self.decoder = nn.Linear(input_size * 2, 1)
-        self.n_tokens = n_tokens
-        self.dropout = nn.Dropout(dropout)  # TODO: actually add this to model
-        self.input_size = input_size
-
-    def forward(self, x, mask):
-        # encoder
-        x = F.relu(self.encoder(x, input_mask=mask.repeat(self.n_tokens, 1, 1).permute(1, 2, 0)))
-        x = x * mask.repeat(self.input_size, 1, 1).permute(1, 2, 0)
-        # embed
-        x = self.embedding(x)
-        x = self.dropout(x)
-        # decoder
-        output = self.decoder(x)
-        return output
-
-
 class ExactGPModel(gpytorch.models.ExactGP):
     def __init__(self, train_x, train_y, likelihood, device_ids=[0]):
         super(ExactGPModel, self).__init__(train_x, train_y, likelihood)
@@ -135,14 +115,3 @@ class ExactGPModel(gpytorch.models.ExactGP):
         mean_x = self.mean_module(x)
         covar_x = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-
-
-def BayesianRidgeRegression(max_iter, tol, alpha_1, alpha_2, lambda_1, lambda_2):
-    return BayesianRidge(
-        n_iter=max_iter,
-        tol=tol,
-        alpha_1=alpha_1,
-        alpha_2=alpha_2,
-        lambda_1=lambda_1,
-        lambda_2=lambda_2,
-    )
