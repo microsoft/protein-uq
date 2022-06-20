@@ -9,10 +9,11 @@ import shutil
 import time, datetime
 import os, sys
 import torch
+import re
+import random
 
-# from chemprop.parsing import parse_train_args
-# from chemprop.train.run_training import run_training, get_dataset_splits, get_atomistic_splits, evaluate_models
-# from chemprop.utils import create_logger
+sys.path.append("../models")
+from train_all import split_dict, train_eval
 
 
 def ordered_list_diff(a, b):
@@ -27,7 +28,7 @@ def ordered_list_diff(a, b):
 
 
 def create_parser():
-    parser = argparse.ArgumentParser(description="active learning")  # TODO: add num_folds? add other CNN uncertainty arguments
+    parser = argparse.ArgumentParser(description="active learning")  # TODO: add other CNN uncertainty arguments
     # General
     parser.add_argument("--split", type=str)
     parser.add_argument("--model", choices=["ridge", "gp", "cnn"], type=str)
@@ -60,6 +61,8 @@ def create_parser():
     parser.add_argument("--size", type=int, default=0)
     parser.add_argument("--length", type=float, default=1.0)
     # Active Learning Arguments
+    parser.add_argument('--num_folds', type=int, default=1,
+                        help='Number of cross-validation folds to do')
     parser.add_argument('--al_init_ratio', type=float, default=0.1,
                         help='Percent of training data to use on first active learning iteration')
     parser.add_argument('--al_end_ratio', type=float, default=None,
@@ -72,8 +75,8 @@ def create_parser():
     parser.add_argument('--al_std_mult', type=float, default=1,
                         help='Multiplier for std in lcb acquisition')
 
-    parser.add_argument('--al_step_scale', type=str, default="log",
-                        help='scale of spacing for active learning steps (log, linear)')
+    parser.add_argument('--al_step_scale', type=str, default="log", choices=["log", "linear"],
+                        help='scale of spacing for active learning steps (log or linear)')
     parser.add_argument('--acquire_min', action='store_true',
                         help='if we should acquire min or max score molecules')
     parser.add_argument('--al_strategy', type=str, nargs='+',
@@ -83,8 +86,6 @@ def create_parser():
                                  "exploit", "exploit_ucb", "exploit_lcb", "exploit_ts"],
                         default=["explorative_greedy"],
                         help='Strategy for active learning regime')
-    parser.add_argument('--use_std', action='store_true', default=False,
-                        help='Use std for evidence during active learning')
     return parser
 
 
@@ -92,8 +93,49 @@ if __name__ == '__main__':
     parser = create_parser()
     args = parser.parse_args()
 
-    dataset = os.path.basename(os.path.splitext(args.data_path)[0])
-    results_root = Path(args.save_dir).parent #f"./al_results/{dataset}/{method}/"
+    if (args.uncertainty in ["dropout", "ensemble", "mve", "evidential", "svi"]) and (args.model != "cnn"):
+        raise ValueError("The uncertainty method you selected only works with CNN.")
+    if (args.uncertainty in ["ridge", "gp"]) and (args.model == "cnn"):
+        raise ValueError("The uncertainty method you selected doesn't work with CNN.")
+
+    device = torch.device("cpu")
+    device = torch.device("cuda:%d" % args.gpu[0])
+    split = split_dict[args.split]
+    dataset = re.findall(r"(\w*)\_", args.split)[0]
+
+    print("dataset: {0} model: {1} split: {2} \n".format(dataset, args.model, split))
+
+    random.seed(0)
+    torch.manual_seed(0)
+    train_eval(
+        dataset,
+        args.model,
+        args.representation,
+        args.uncertainty,
+        split,
+        device,
+        args.scale,
+        args.mean,
+        args.mut_mean,
+        256,
+        args.flip,
+        args.lr,
+        args.kernel_size,
+        args.input_size,
+        args.dropout,
+        args.gb1_shorten,
+        args.max_iter,
+        args.tol,
+        args.alpha_1,
+        args.alpha_2,
+        args.lambda_1,
+        args.lambda_2,
+        args.size,
+        args.length,
+        args.gpu,
+    )
+
+    results_root = Path(args.save_dir).parent #f"./al_results/{dataset}/{method}/"  # TODO: make good save dir
     Path(results_root).mkdir(parents=True, exist_ok=True)
 
 
@@ -103,7 +145,7 @@ if __name__ == '__main__':
 
         ### Load the data
         (all_train_data, val_data, test_data), features_scaler, scaler = \
-            get_dataset_splits(args.data_path, args, logger)
+            get_dataset_splits(args.data_path, args, logger)  # TODO: get dataset splits (move this out of train_all into utils or other file?)
 
         ### Define active learning step variables and subsample the tasks
         n_total = len(all_train_data)
@@ -127,15 +169,13 @@ if __name__ == '__main__':
             n_samples_per_run = np.linspace(n_start, n_sample, n_loops)
         elif args.al_step_scale == "log":
             n_samples_per_run = np.logspace(np.log10(n_start), np.log10(n_sample), n_loops)
-        else:
-            raise ValueError(f"unknown args.al_step_scale = {args.al_step_scale}")
         n_samples_per_run = np.round(n_samples_per_run).astype(int)
 
 
         ### SLG: Move this to outside strategy loop to sample the same initial
         # batch per strategy
         train_subset_inds_start = np.random.choice(n_total, n_start, replace=False)
-        for strategy in args.al_strategy:
+        for strategy in args.al_strategy:  # TODO: okay to leave like this, but run in parallel rather than loop (separate job for each strategy instead of list of strategies)
             train_subset_inds = np.copy(train_subset_inds_start)
 
             tic_time = time.time() # grab the current time for logging
@@ -148,7 +188,7 @@ if __name__ == '__main__':
 
                 ### Train with the data subset, return the best models
                 models = run_training(
-                    train_data, val_data, scaler, features_scaler, args, logger)
+                    train_data, val_data, scaler, features_scaler, args, logger)  # TODO: replace this with part of train_all loop
 
                 ### Sample according to a strategy
                 if "explorative" in strategy or "score" in strategy or "exploit" in strategy:
@@ -159,21 +199,17 @@ if __name__ == '__main__':
 
                     # Modified this line such that call with export_std flag, then grab the stds.
                     # will return: ensemble_scores, ensemble_predictions, confidence, std, entropy
-                    all_train_scores, all_train_preds, all_train_conf, all_train_std, all_train_entropy = evaluate_models(
-                        models, train_data, all_train_data_unscaled, scaler, args, logger, export_std=True)
+                    all_train_scores, all_train_preds, _, all_train_std, all_train_entropy = evaluate_models(
+                        models, train_data, all_train_data_unscaled, scaler, args, logger, export_std=True) # TODO: replace this with part of train_all loop
 
                     ### Find the lowest confidence (highest unc) samples, add
                     # them to the training inds consider average entropy across
                     # tasks
                     sq_error = np.square(
                         np.array(all_train_data_unscaled.targets()) - all_train_preds)
-                    rmse = np.sqrt( np.mean(sq_error.astype(np.float32), axis=1) )
+                    rmse = np.sqrt( np.mean(sq_error.astype(np.float32), axis=1) )  # TODO: replace with sklearn RMSE?
 
-                    # for evidence, either use std or conf for the uncertainty
-                    if args.use_std:
-                        mean_uncertainty = np.mean(all_train_std, axis=1)
-                    else:
-                        mean_uncertainty = np.mean(all_train_conf, axis=1)
+                    mean_uncertainty = np.mean(all_train_std, axis=1)
 
                     if "explorative" in strategy:
                         per_sample_weight = mean_uncertainty
