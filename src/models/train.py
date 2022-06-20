@@ -151,7 +151,7 @@ def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer,
 
 def train_ridge(X_train, y_train, model):
     model.fit(X_train, y_train)
-    iterations = model.n_iter_[0]
+    iterations = model.n_iter_
     print("Finished training BayesianRidge at iteration {0}".format(iterations))
     return model, iterations
 

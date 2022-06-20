@@ -162,3 +162,4 @@ src/models/evals_new/*.csv
 evals_new_gp_ky.zip 
 data/*/splits/*.csv
 protein-uq_lambda*.yml
+src/models/test_results

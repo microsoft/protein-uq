@@ -43,9 +43,9 @@ split_dict = {
 def create_parser():
     parser = argparse.ArgumentParser(description="train esm")
     # General
-    parser.add_argument("split", type=str)
-    parser.add_argument("model", choices=["ridge", "gp", "cnn"], type=str)
-    parser.add_argument("representation", choices=["ohe", "esm"], type=str)
+    parser.add_argument("--split", type=str)
+    parser.add_argument("--model", choices=["ridge", "gp", "cnn"], type=str)
+    parser.add_argument("--representation", choices=["ohe", "esm"], type=str)
     parser.add_argument("--gpu", type=int, nargs="+", default=[0])
     parser.add_argument(
         "--uncertainty",
@@ -80,8 +80,11 @@ def create_parser():
 def train_eval(
     dataset,
     model,
+    representation,
+    uncertainty,
     split,
     device,
+    scale,
     mean,
     mut_mean,
     batch_size,
@@ -90,23 +93,31 @@ def train_eval(
     kernel_size,
     input_size,
     dropout,
-    alpha,
     gb1_shorten,
+    max_iter,
+    tol,
+    alpha_1,
+    alpha_2,
+    lambda_1,
+    lambda_2,
+    size,
+    length,
+    gpu,
 ):
 
     results_dir = Path(RESULTS_DIR)
     EVAL_PATH = results_dir / dataset / model / split
     EVAL_PATH.mkdir(parents=True, exist_ok=True)
 
-    if args.mean:
-        model += "_mean"
-    if args.mut_mean:
-        model += "_mut_mean"
-    if args.flip:
-        split += "_flipped"
+    # if mean:
+    #     model += "_mean"  # TODO: if including this, need to modify below blocks to have .startswith()
+    # if mut_mean:
+    #     model += "_mut_mean"
+    # if flip:
+    #     split += "_flipped"
 
     # load data
-    if args.representation == "esm":
+    if representation == "esm":
         if model == "cnn":
             train_data, val_data, test_data, _ = load_esm_dataset(
                 dataset, model, split, mean, mut_mean, flip, gb1_shorten=gb1_shorten
@@ -118,7 +129,7 @@ def train_eval(
             train_target = [i[1].item() for i in train]
             test_seq = np.array([i[0].numpy() for i in test]).squeeze()
             test_target = [i[1].item() for i in test]
-    elif args.representation == "ohe":
+    elif representation == "ohe":
         if model == "cnn":
             train, val, test, _ = load_dataset(dataset, split + ".csv", gb1_shorten=gb1_shorten)
         else:
@@ -127,7 +138,7 @@ def train_eval(
             test_seq, test_target = get_data(test, max_length, encode_pad=False, one_hots=True)
 
     # scale data
-    if args.scale:
+    if scale:
         scaler = StandardScaler()
         train_seq = scaler.fit_transform(train_seq)
         test_seq = scaler.transform(test_seq)
@@ -143,14 +154,14 @@ def train_eval(
     # train and evaluate models
     if model == "ridge":
         lr_model = BayesianRidgeRegression(
-            args.max_iter,
-            args.tol,
-            args.alpha_1,
-            args.alpha_2,
-            args.lambda_1,
-            args.lambda_2,
+            max_iter,
+            tol,
+            alpha_1,
+            alpha_2,
+            lambda_1,
+            lambda_2,
         )  # initialize model
-        lr_trained, epochs_trained = train_ridge(train_seq, train_target, lr_model)  # train and pass back trained model
+        lr_trained, _ = train_ridge(train_seq, train_target, lr_model)  # train and pass back trained model
         # TODO: add more to evaluation function based on my calculate_metrics function
         train_rho, train_mse = evaluate_ridge(train_seq, train_target, lr_trained, EVAL_PATH / "train")  # evaluate on train
         test_rho, test_mse = evaluate_ridge(test_seq, test_target, lr_trained, EVAL_PATH / "test")  # evaluate on test
@@ -159,9 +170,9 @@ def train_eval(
         train_seq, train_target = torch.tensor(train_seq).float(), torch.tensor(train_target).float()
         test_seq, test_target = torch.tensor(test_seq).float(), torch.tensor(test_target).float()
         likelihood = gpytorch.likelihoods.GaussianLikelihood()
-        model = ExactGPModel(train_seq, train_target, likelihood, device_ids=args.gpu)
-        model.covar_module.module.base_kernel.lengthscale *= args.length
-        gp_trained, epochs_trained = train_gp(train_seq, train_target, model, device, args.length, args.size)
+        model = ExactGPModel(train_seq, train_target, likelihood, device_ids=gpu)
+        model.covar_module.module.base_kernel.lengthscale *= length
+        gp_trained, _ = train_gp(train_seq, train_target, model, device, length, size)
 
         train_rho, train_mse = evaluate_gp(train_seq, train_target, lr_trained, EVAL_PATH / "train")  # evaluate on train
         test_rho, test_mse = evaluate_gp(test_seq, test_target, lr_trained, EVAL_PATH / "test")  # evaluate on test
@@ -240,18 +251,13 @@ def train_eval(
             [
                 dataset,
                 model,
+                uncertainty,
                 split,
                 train_rho,
                 train_mse,
                 test_rho,
                 test_mse,
-                epochs_trained,
-                lr,
-                kernel_size,
-                input_size,
                 dropout,
-                alpha,
-                gb1_shorten,
             ]
         )
 
@@ -264,45 +270,35 @@ def main(args):
 
     print("dataset: {0} model: {1} split: {2} \n".format(dataset, args.model, split))
 
-    if args.ensemble:  # run training and evaluation on 10 different random seeds
-        for i in range(10):
-            random.seed(i)
-            torch.manual_seed(i)
-            train_eval(
-                dataset,
-                args.model,
-                split,
-                device,
-                args.mean,
-                args.mut_mean,
-                256,
-                args.flip,
-                args.lr,
-                args.kernel_size,
-                args.input_size,
-                args.dropout,
-                args.alpha,
-                args.gb1_shorten,
-            )
-    else:
-        random.seed(10)
-        torch.manual_seed(10)
-        train_eval(
-            dataset,
-            args.model,
-            split,
-            device,
-            args.mean,
-            args.mut_mean,
-            256,
-            args.flip,
-            args.lr,
-            args.kernel_size,
-            args.input_size,
-            args.dropout,
-            args.alpha,
-            args.gb1_shorten,
-        )
+    random.seed(10)
+    torch.manual_seed(10)
+    train_eval(
+        dataset,
+        args.model,
+        args.representation,
+        args.uncertainty,
+        split,
+        device,
+        args.scale,
+        args.mean,
+        args.mut_mean,
+        256,
+        args.flip,
+        args.lr,
+        args.kernel_size,
+        args.input_size,
+        args.dropout,
+        args.gb1_shorten,
+        args.max_iter,
+        args.tol,
+        args.alpha_1,
+        args.alpha_2,
+        args.lambda_1,
+        args.lambda_2,
+        args.size,
+        args.length,
+        args.gpu,
+    )
 
 
 if __name__ == "__main__":

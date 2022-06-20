@@ -163,7 +163,7 @@ def load_dataset(dataset, split, val_split=True, gb1_shorten=False):
 def load_esm_dataset(dataset, model, split, mean, mut_mean, flip, gb1_shorten=False):
 
     embedding_dir = Path(EMBEDDING_DIR)
-    PATH = embedding_dir / dataset / model / split
+    PATH = embedding_dir / dataset / "esm1b" / split
     print("loading ESM embeddings:", split)
 
     if mean:
