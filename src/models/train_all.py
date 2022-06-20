@@ -139,12 +139,15 @@ def train_eval(
 
     # scale data
     if scale:
-        scaler = StandardScaler()
-        train_seq = scaler.fit_transform(train_seq)
-        test_seq = scaler.transform(test_seq)
-        train_target = scaler.fit_transform(np.array(train_target)[:, None])[:, 0]
-        test_target = scaler.transform(np.array(test_target)[:, None])[:, 0]
-    # TODO: unscale before evaluating
+        x_scaler = StandardScaler()
+        y_scaler = StandardScaler()
+        train_seq = x_scaler.fit_transform(train_seq)
+        test_seq = x_scaler.transform(test_seq)
+        train_target = y_scaler.fit_transform(np.array(train_target)[:, None])[:, 0]
+        test_target = y_scaler.transform(np.array(test_target)[:, None])[:, 0]
+    else:
+        x_scaler = None
+        y_scaler = None
 
     if model in ["ridge", "gp"]:
         lr = kernel_size = input_size = dropout = ""  # get rid of unused variables
@@ -161,8 +164,8 @@ def train_eval(
         )  # initialize model
         lr_trained, _ = train_ridge(train_seq, train_target, lr_model)  # train and pass back trained model
         # TODO: add more to evaluation function based on my calculate_metrics function
-        train_rho, train_mse = evaluate_ridge(train_seq, train_target, lr_trained, EVAL_PATH / "train")  # evaluate on train
-        test_rho, test_mse = evaluate_ridge(test_seq, test_target, lr_trained, EVAL_PATH / "test")  # evaluate on test
+        train_rho, train_mse = evaluate_ridge(train_seq, train_target, lr_trained, EVAL_PATH / "train", y_scaler)  # evaluate on train
+        test_rho, test_mse = evaluate_ridge(test_seq, test_target, lr_trained, EVAL_PATH / "test", y_scaler)  # evaluate on test
 
     if model == "gp":
         train_seq, train_target = torch.tensor(train_seq).float(), torch.tensor(train_target).float()
@@ -172,8 +175,8 @@ def train_eval(
         gp_model.covar_module.module.base_kernel.lengthscale *= length
         gp_trained, _ = train_gp(train_seq, train_target, gp_model, likelihood, device, length, size)
 
-        train_rho, train_mse = evaluate_gp(train_seq, train_target, gp_trained, likelihood, device, size, EVAL_PATH / "train")  # evaluate on train
-        test_rho, test_mse = evaluate_gp(test_seq, test_target, gp_trained, likelihood, device, size, EVAL_PATH / "test")  # evaluate on test
+        train_rho, train_mse = evaluate_gp(train_seq, train_target, gp_trained, likelihood, device, size, EVAL_PATH / "train", y_scaler)  # evaluate on train
+        test_rho, test_mse = evaluate_gp(test_seq, test_target, gp_trained, likelihood, device, size, EVAL_PATH / "test", y_scaler)  # evaluate on test
 
     if model == "cnn":
         lr = alpha = ""  # get rid of unused variables
@@ -236,8 +239,8 @@ def train_eval(
             EVAL_PATH,
         )
         # evaluate
-        train_rho, train_mse = evaluate_cnn(train_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "train")
-        test_rho, test_mse = evaluate_cnn(test_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "test")
+        train_rho, train_mse = evaluate_cnn(train_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "train", y_scaler)
+        test_rho, test_mse = evaluate_cnn(test_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "test", y_scaler)
 
     print("done training and testing: dataset: {0} model: {1} split: {2} \n".format(dataset, model, split))
     print("full results saved at: ", EVAL_PATH)

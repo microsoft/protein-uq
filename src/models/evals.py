@@ -48,50 +48,7 @@ def regression_eval(predicted, labels, SAVE_PATH):
     return round(rho, 2), round(mse, 2)
 
 
-def evaluate_esm(data_iterator, model, device, size, mean, mut_mean, SAVE_PATH):
-    """run data through model and print eval stats"""
-
-    # create a tensor to hold results
-    out = np.empty([size])
-    labels = np.empty([size])
-
-    s = 0
-
-    model.eval()
-    model.to(device)
-
-    with torch.no_grad():  # evaluate validation loss here
-        for i, (inp, l) in enumerate(data_iterator):
-
-            inp = inp.to(device)
-
-            if mean or mut_mean:
-                o = model(inp).squeeze().cpu()
-            else:
-                m = (inp[:, :, 0] != 0).long().to(device)
-                o = model(inp, m).squeeze().cpu()  # Forward prop without storing gradients
-
-            b = inp.shape[0]
-            out[s : s + b :] = o
-            labels[s : s + b :] = l
-
-            s += b
-
-    if mean:
-        SAVE_PATH = SAVE_PATH / "mean"
-    if mut_mean:
-        SAVE_PATH = SAVE_PATH / "mut_mean"
-
-    SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already
-    with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:
-        pickle.dump((out, labels), f)
-
-    rho, mse = regression_eval(predicted=out, labels=labels, SAVE_PATH=SAVE_PATH)
-
-    return rho, mse
-
-
-def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH):
+def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=None):
     """run data through model and print eval stats"""
 
     model = model.to(device)
@@ -121,7 +78,13 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH):
 
     out = torch.cat(outputs).numpy()
     labels = torch.cat(tgts).cpu().numpy()
-    SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already
+
+    if y_scaler:
+        labels = y_scaler.inverse_transform(labels)
+        out = y_scaler.inverse_transform(out)
+        #preds_std = preds_std.reshape(-1, 1) * y_scaler.scale_ # TODO: unscale st dev (make sure st dev and not var)
+
+    SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already #TODO: add saving to ridge and GP
     with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:
         pickle.dump((out, labels), f)
     rho, mse = regression_eval(predicted=out, labels=labels, SAVE_PATH=SAVE_PATH)
@@ -129,13 +92,19 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH):
     return rho, mse
 
 
-def evaluate_ridge(X, y, model, SAVE_PATH):
+def evaluate_ridge(X, y, model, SAVE_PATH, y_scaler=None):
     preds_mean, preds_std = model.predict(X, return_std=True)
+
+    if y_scaler:
+        y = y_scaler.inverse_transform(y.reshape(-1, 1))
+        preds_mean = y_scaler.inverse_transform(preds_mean.reshape(-1, 1))
+        preds_std = preds_std.reshape(-1, 1) * y_scaler.scale_
+
     rho, mse = regression_eval(predicted=preds_mean, labels=y, SAVE_PATH=SAVE_PATH)
     return rho, mse
 
 
-def evaluate_gp(X, y, model, likelihood, device, size, SAVE_PATH):
+def evaluate_gp(X, y, model, likelihood, device, size, SAVE_PATH, y_scaler=None):
     # Get into evaluation (predictive posterior) mode
     model.eval()
     likelihood.eval()
@@ -150,6 +119,11 @@ def evaluate_gp(X, y, model, likelihood, device, size, SAVE_PATH):
     lower = lower.cpu()
     upper = upper.cpu()
     preds_std = (upper - preds_mean) / 2
+
+    if y_scaler:
+        y = y_scaler.inverse_transform(y.reshape(-1, 1))
+        preds_mean = y_scaler.inverse_transform(preds_mean.reshape(-1, 1))
+        preds_std = preds_std.reshape(-1, 1) * y_scaler.scale_
 
     rho, mse = regression_eval(predicted=preds_mean, labels=y, SAVE_PATH=SAVE_PATH)
     return rho, mse
