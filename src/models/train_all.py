@@ -119,7 +119,7 @@ def train_eval(
     # load data
     if representation == "esm":
         if model == "cnn":
-            train_data, val_data, test_data, _ = load_esm_dataset(
+            train, val, test, _ = load_esm_dataset(
                 dataset, model, split, mean, mut_mean, flip, gb1_shorten=gb1_shorten
             )
             # TODO: add transformations for CNN ESM
@@ -138,7 +138,7 @@ def train_eval(
             test_seq, test_target = get_data(test, max_length, encode_pad=False, one_hots=True)
 
     # scale data
-    if scale:
+    if scale and model in ["ridge", "gp"]: # TODO: should there also be a scale option for cnn?
         x_scaler = StandardScaler()
         y_scaler = StandardScaler()
         train_seq = x_scaler.fit_transform(train_seq)
@@ -310,5 +310,7 @@ if __name__ == "__main__":
 
     if (args.uncertainty in ["dropout", "ensemble", "mve", "evidential", "svi"]) and (args.model != "cnn"):
         raise ValueError("The uncertainty method you selected only works with CNN.")
+    if (args.uncertainty in ["ridge", "gp"]) and (args.model == "cnn"):
+        raise ValueError("The uncertainty method you selected doesn't work with CNN.")
 
     main(args)
