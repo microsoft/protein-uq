@@ -58,10 +58,16 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=N
     print("loaded the saved model")
 
     def test_step(model, batch):
-        src, tgt, mask = batch
+        try:
+            src, tgt, mask = batch
+        except ValueError:  # No masks for ESM mean embeddings
+            src, tgt = batch
         src = src.to(device).float()
         tgt = tgt.to(device).float()
-        mask = mask.to(device).float()
+        try:
+            mask = mask.to(device).float()
+        except UnboundLocalError:  # No masks for ESM mean embeddings
+            mask = None
         output = model(src, mask)
         return output.detach().cpu(), tgt.detach().cpu()
 

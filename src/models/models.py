@@ -67,23 +67,23 @@ class MaskedConv1d(nn.Conv1d):
         bias: bool = True,
     ):
         """
-        :param in_channels: input channels
-        :param out_channels: output channels
-        :param kernel_size: the kernel width
+        :param in_channels: input channels (vocab size, e.g. 22 for OHE)
+        :param out_channels: output channels (e.g. 1024 for OHE)
+        :param kernel_size: the kernel width (e.g. 5)
         :param stride: filter shift
         :param dilation: dilation factor
         :param groups: perform depth-wise convolutions
         :param bias: adds learnable bias to output
         """
-        padding = dilation * (kernel_size - 1) // 2
+        padding = dilation * (kernel_size - 1) // 2  # 2 for OHE
         super().__init__(
             in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, groups=groups, bias=bias, padding=padding
         )
 
     def forward(self, x, input_mask=None):
         if input_mask is not None:
-            x = x * input_mask
-        return super().forward(x.transpose(1, 2)).transpose(1, 2)
+            x = x * input_mask  # x has shape [batch_size, sequence_length, vocab_size] (e.g. [25, 265, 22] for gb1_1 OHE training)
+        return super().forward(x.transpose(1, 2)).transpose(1, 2)  # transpose because it expects [batch_size, vocab_size, sequence_length]
 
 
 class LengthMaxPool1D(nn.Module):
@@ -101,19 +101,26 @@ class LengthMaxPool1D(nn.Module):
 
 
 class FluorescenceModel(nn.Module):
-    def __init__(self, n_tokens, kernel_size, input_size, dropout):
+    def __init__(self, n_tokens, kernel_size, input_size, dropout, input_type="ohe"):
         super(FluorescenceModel, self).__init__()
         self.encoder = MaskedConv1d(n_tokens, input_size, kernel_size=kernel_size)
+        self.esm_conv = nn.Conv1d(1, 1, kernel_size, padding=2)  # in_channels = out_channels = 1
         self.embedding = LengthMaxPool1D(linear=True, in_dim=input_size, out_dim=input_size * 2)
         self.decoder = nn.Linear(input_size * 2, 1)
-        self.n_tokens = n_tokens
+        self.n_tokens = n_tokens  # length of vocab (e.g. 22)
         self.dropout = nn.Dropout(dropout)  # TODO: actually add this to model
-        self.input_size = input_size
+        self.input_size = input_size  # input vector size (1024 for one hot encodings, 1280 for ESM mean)
+        self.input_type = input_type  # choose from "cnn", "esm_mean", or "esm_full"
 
     def forward(self, x, mask):
         # encoder
-        x = F.relu(self.encoder(x, input_mask=mask.repeat(self.n_tokens, 1, 1).permute(1, 2, 0)))
-        x = x * mask.repeat(self.input_size, 1, 1).permute(1, 2, 0)
+        if self.input_type == "ohe":
+            x = F.relu(self.encoder(x, input_mask=mask.repeat(self.n_tokens, 1, 1).permute(1, 2, 0)))
+            x = x * mask.repeat(self.input_size, 1, 1).permute(1, 2, 0)
+        elif self.input_type == "esm_mean":
+            x = self.esm_conv(x.unsqueeze(1))  # unsqueeze to make shape be [batch_size, 1, 1280]
+        elif self.input_type == "esm_full":
+            raise ValueError("ESM full not implemented yet")  # TODO: implement this option using attention layer defined above
         # embed
         x = self.embedding(x)
         x = self.dropout(x)

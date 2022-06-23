@@ -13,11 +13,19 @@ def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer,
     model = model.to(device)
 
     def step(model, batch, train=True):
-        src, tgt, mask = batch
+        try:
+            src, tgt, mask = batch
+        except ValueError:  # No masks for ESM mean embeddings
+            src, tgt = batch
         src = src.to(device).float()
         tgt = tgt.to(device).float()
-        mask = mask.to(device).float()
+        try:
+            mask = mask.to(device).float()
+        except UnboundLocalError:  # No masks for ESM mean embeddings
+            mask = None
         output = model(src, mask)
+        if tgt.ndim == 1 and output.ndim == 2:
+            tgt = tgt.unsqueeze(-1)  # unsqueeze targets for ESM mean ([batch_size] -> [batch_size, 1])
         loss = criterion(output, tgt)
         if train:
             optimizer.zero_grad()

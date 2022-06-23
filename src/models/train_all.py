@@ -17,7 +17,7 @@ from evals import evaluate_cnn, evaluate_gp, evaluate_ridge
 from filepaths import BASELINE_DIR, RESULTS_DIR
 from models import BayesianRidgeRegression, ExactGPModel, FluorescenceModel
 from train import train_cnn, train_gp, train_ridge
-from utils import ASCollater, SequenceDataset, Tokenizer, get_data, load_dataset, load_esm_dataset, vocab
+from utils import ASCollater, ESMSequenceMeanDataset, SequenceDataset, Tokenizer, get_data, load_dataset, load_esm_dataset, vocab
 
 sys.path.append(BASELINE_DIR)
 
@@ -179,33 +179,59 @@ def train_eval(
         test_rho, test_mse = evaluate_gp(test_seq, test_target, gp_trained, likelihood, device, size, EVAL_PATH / "test", y_scaler)  # evaluate on test
 
     if model == "cnn":
+        if representation == "ohe":
+            cnn_input_type = "ohe"
+        if representation == "esm":
+            cnn_input_type = "esm_mean"  # TODO: update if adding esm_full option
+            input_size = 1280  # size of ESM mean embeddings is fixed and different from 1024 default for OHE
+            
         lr = alpha = ""  # get rid of unused variables
-        collate = ASCollater(vocab, Tokenizer(vocab), pad=True)
         if dataset == "meltome":
-            batch_size = 30  # smaller batch sizes for meltome since seqs are long
-        train_iterator = DataLoader(
-            SequenceDataset(train),
-            collate_fn=collate,
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=4,
-        )
-        val_iterator = DataLoader(
-            SequenceDataset(val),
-            collate_fn=collate,
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=4,
-        )
-        test_iterator = DataLoader(
-            SequenceDataset(test),
-            collate_fn=collate,
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=4,
-        )
+            batch_size = 30  # smaller batch sizes for meltome since seqs are long # TODO: modify meltome data loader
+        if representation == "ohe":
+            collate = ASCollater(vocab, Tokenizer(vocab), pad=True)
+            train_iterator = DataLoader(
+                SequenceDataset(train),
+                collate_fn=collate,
+                batch_size=batch_size,
+                shuffle=True,
+                num_workers=4,
+            )
+            val_iterator = DataLoader(
+                SequenceDataset(val),
+                collate_fn=collate,
+                batch_size=batch_size,
+                shuffle=True,
+                num_workers=4,
+            )
+            test_iterator = DataLoader(
+                SequenceDataset(test),
+                collate_fn=collate,
+                batch_size=batch_size,
+                shuffle=True,
+                num_workers=4,
+            )
+        elif representation == "esm":  # TODO: add option to use esm_full
+            train_iterator = DataLoader(
+                ESMSequenceMeanDataset(train),
+                batch_size=batch_size,
+                shuffle=True,
+                num_workers=4,
+            )
+            val_iterator = DataLoader(
+                ESMSequenceMeanDataset(val),
+                batch_size=batch_size,
+                shuffle=True,
+                num_workers=4,
+            )
+            test_iterator = DataLoader(
+                ESMSequenceMeanDataset(test),
+                batch_size=batch_size,
+                shuffle=True,
+                num_workers=4,
+            )
         # initialize model
-        cnn_model = FluorescenceModel(len(vocab), kernel_size, input_size, dropout)
+        cnn_model = FluorescenceModel(len(vocab), kernel_size, input_size, dropout, input_type=cnn_input_type)
         # create optimizer and loss function
         optimizer = optim.Adam(
             [
@@ -285,7 +311,7 @@ def main(args):
         args.scale,
         args.mean,
         args.mut_mean,
-        256,
+        256,  # batch size
         args.flip,
         args.lr,
         args.kernel_size,

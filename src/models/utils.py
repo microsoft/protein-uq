@@ -237,6 +237,21 @@ class ESMSequenceDataset(Dataset):
         return self.emb[index], self.mask[index], self.labels[index]
 
 
+class ESMSequenceMeanDataset(Dataset):
+    "special dataset class just to deal with ESM mean tensors"
+
+    def __init__(self, data):
+        self.data = data
+        self.emb = np.array([i[0].numpy() for i in data]).squeeze()
+        self.labels = [i[1].item() for i in data]
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, index):
+        return self.emb[index], self.labels[index]
+
+
 class HugeDataset(Dataset):
     "load in the data directly from saved .pt files output from batch ESM. Include test/train in path"
 
