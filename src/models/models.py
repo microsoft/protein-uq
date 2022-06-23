@@ -100,7 +100,7 @@ class LengthMaxPool1D(nn.Module):
         return x
 
 
-class FluorescenceModel(nn.Module):
+class FluorescenceModel(nn.Module):  # TODO: refactor ensemble, MVE, evidential, SVI, dropout into this
     def __init__(self, n_tokens, kernel_size, input_size, dropout, input_type="ohe"):
         super(FluorescenceModel, self).__init__()
         self.encoder = MaskedConv1d(n_tokens, input_size, kernel_size=kernel_size)
@@ -108,7 +108,7 @@ class FluorescenceModel(nn.Module):
         self.embedding = LengthMaxPool1D(linear=True, in_dim=input_size, out_dim=input_size * 2)
         self.decoder = nn.Linear(input_size * 2, 1)
         self.n_tokens = n_tokens  # length of vocab (e.g. 22)
-        self.dropout = nn.Dropout(dropout)  # TODO: actually add this to model
+        self.dropout = nn.Dropout(dropout)  # TODO: make dropout work at inference time
         self.input_size = input_size  # input vector size (1024 for one hot encodings, 1280 for ESM mean)
         self.input_type = input_type  # choose from "cnn", "esm_mean", or "esm_full"
 

@@ -122,7 +122,6 @@ def train_eval(
             train, val, test, _ = load_esm_dataset(
                 dataset, model, split, mean, mut_mean, flip, gb1_shorten=gb1_shorten
             )
-            # TODO: add transformations for CNN ESM
         else:
             train, _, test, max_length = load_esm_dataset(dataset, model, split, mean, mut_mean, flip, gb1_shorten=gb1_shorten)
             train_seq = np.array([i[0].numpy() for i in train]).squeeze()
@@ -138,7 +137,7 @@ def train_eval(
             test_seq, test_target = get_data(test, max_length, encode_pad=False, one_hots=True)
 
     # scale data
-    if scale and model in ["ridge", "gp"]: # TODO: should there also be a scale option for cnn?
+    if scale and model in ["ridge", "gp"]:  # TODO: should there also be a scale option for cnn?
         x_scaler = StandardScaler()
         y_scaler = StandardScaler()
         train_seq = x_scaler.fit_transform(train_seq)
@@ -163,7 +162,6 @@ def train_eval(
             lambda_2,
         )  # initialize model
         lr_trained, _ = train_ridge(train_seq, train_target, lr_model)  # train and pass back trained model
-        # TODO: add more to evaluation function based on my calculate_metrics function
         train_rho, train_mse = evaluate_ridge(train_seq, train_target, lr_trained, EVAL_PATH / "train", y_scaler)  # evaluate on train
         test_rho, test_mse = evaluate_ridge(test_seq, test_target, lr_trained, EVAL_PATH / "test", y_scaler)  # evaluate on test
 
@@ -187,7 +185,7 @@ def train_eval(
             
         lr = alpha = ""  # get rid of unused variables
         if dataset == "meltome":
-            batch_size = 30  # smaller batch sizes for meltome since seqs are long # TODO: modify meltome data loader
+            batch_size = 30  # smaller batch sizes for meltome since seqs are long
         if representation == "ohe":
             collate = ASCollater(vocab, Tokenizer(vocab), pad=True)
             train_iterator = DataLoader(
@@ -273,7 +271,8 @@ def train_eval(
     print("train stats: Spearman: %.2f MSE: %.2f " % (train_rho, train_mse))
     print("test stats: Spearman: %.2f MSE: %.2f " % (test_rho, test_mse))
 
-    # TODO: write out prediction files for evaluation; make parity plots and learning curves
+    # TODO: write out prediction files for train, val, test
+    # TODO: make sure all outputs in good format to read in for auto-generating plots
 
     with open(results_dir / (dataset + "_results.csv"), "a", newline="") as f:
         writer(f).writerow(
@@ -339,4 +338,4 @@ if __name__ == "__main__":
     if (args.uncertainty in ["ridge", "gp"]) and (args.model == "cnn"):
         raise ValueError("The uncertainty method you selected doesn't work with CNN.")
 
-    main(args)
+    main(args)  # TODO: remove X_ files, sort imports in all files, lint/format all files, make config files/make files

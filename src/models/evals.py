@@ -28,7 +28,7 @@ def concat_tensor(tensor_list, keep_tensor=False):
         return np.array(output_tensor)
 
 
-def regression_eval(predicted, labels, SAVE_PATH):
+def regression_eval(predicted, labels, SAVE_PATH):  # TODO: add uncertainty_eval fxn with stuff from main branch calculate_metrics fxn, add uncertainty plots, call uncetainty_eval below (3x)
     """
     input: 1D tensor or array of predicted values and labels
     output: saves spearman, MSE, and graph of predicted vs actual
@@ -39,13 +39,13 @@ def regression_eval(predicted, labels, SAVE_PATH):
     rho, _ = stats.spearmanr(predicted, labels)  # spearman
     mse = mean_squared_error(predicted, labels)  # MSE
 
-    # remove graphing - causes segmentation fault
+    # remove graphing - causes segmentation fault  # TODO: try to reenable plotting (include parities for train, validation, test + learning curves)
     # plt.figure()
     # plt.title('predicted (y) vs. labels (x)')
     # sns.scatterplot(x = labels, y = predicted, s = 2, alpha = 0.2)
     # plt.savefig(SAVE_PATH / 'preds_vs_labels.png', dpi = 300)
 
-    return round(rho, 2), round(mse, 2)
+    return round(rho, 2), round(mse, 2)  # TODO: add more regression metrics to this
 
 
 def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=None):
