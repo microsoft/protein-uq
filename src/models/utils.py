@@ -281,3 +281,46 @@ class HugeDataset(Dataset):
             e = torch.load(self.path + str(index) + ".pt")["representations"][33]
 
         return e, self.label[index]
+
+
+def negative_log_likelihood(pred_targets, pred_var, targets):
+    clamped_var = torch.clamp(pred_var, min=0.00001)
+    loss = torch.log(clamped_var) / 2 + (pred_targets - targets) ** 2 / (2 * clamped_var)
+    return torch.mean(loss)
+
+
+def evidential_loss(mu, v, alpha, beta, targets, lam=1, epsilon=1e-4):
+    """
+    Use Deep Evidential Regression negative log likelihood loss + evidential
+        regularizer
+
+    :mu: pred mean parameter for NIG
+    :v: pred lam parameter for NIG
+    :alpha: predicted parameter for NIG
+    :beta: Predicted parmaeter for NIG
+    :targets: Outputs to predict
+
+    :return: Loss
+    """
+    # Calculate NLL loss
+    twoBlambda = 2 * beta * (1 + v)
+    nll = (
+        0.5 * torch.log(np.pi / v)
+        - alpha * torch.log(twoBlambda)
+        + (alpha + 0.5) * torch.log(v * (targets - mu) ** 2 + twoBlambda)
+        + torch.lgamma(alpha)
+        - torch.lgamma(alpha + 0.5)
+    )
+
+    L_NLL = nll  # torch.mean(nll, dim=-1)
+
+    # Calculate regularizer based on absolute error of prediction
+    error = torch.abs((targets - mu))
+    reg = error * (2 * v + alpha)
+    L_REG = reg  # torch.mean(reg, dim=-1)
+
+    # Loss = L_NLL + L_REG
+    # TODO If we want to optimize the dual- of the objective use the line below:
+    loss = L_NLL + lam * (L_REG - epsilon)
+
+    return torch.mean(loss)

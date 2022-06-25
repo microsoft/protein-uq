@@ -175,7 +175,7 @@ def train_eval(
         if representation == "esm":
             cnn_input_type = "esm_mean"  # TODO: separate into esm_mean and esm_full
             input_size = 1280  # size of ESM mean embeddings is fixed and different from 1024 default for OHE
-            
+
         lr = alpha = ""  # get rid of unused variables
         if dataset == "meltome":
             batch_size = 30  # smaller batch sizes for meltome since seqs are long
@@ -275,9 +275,13 @@ def train_eval(
                 uncertainty,
                 split,
                 train_rho,
-                train_mse,
+                train_rmse,
+                train_mae,
+                train_r2,
                 test_rho,
-                test_mse,
+                test_rmse,
+                test_mae,
+                test_r2,
                 dropout,
             ]
         )

@@ -25,6 +25,58 @@ def concat_tensor(tensor_list, keep_tensor=False):
         return np.array(output_tensor)
 
 
+def evaluate_miscalibration_area(abs_error, uncertainty):
+    standard_devs = abs_error / uncertainty
+    probabilities = [2 * (stats.norm.cdf(standard_dev) - 0.5) for standard_dev in standard_devs]
+    sorted_probabilities = sorted(probabilities)
+
+    fraction_under_thresholds = []
+    threshold = 0
+
+    for i in range(len(sorted_probabilities)):
+        while sorted_probabilities[i] > threshold:
+            fraction_under_thresholds.append(i / len(sorted_probabilities))
+            threshold += 0.001
+
+    # Condition used 1.0001 to catch floating point errors.
+    while threshold < 1.0001:
+        fraction_under_thresholds.append(1)
+        threshold += 0.001
+
+    thresholds = np.linspace(0, 1, num=1001)
+    miscalibration = [np.abs(fraction_under_thresholds[i] - thresholds[i]) for i in range(len(thresholds))]
+    miscalibration_area = 0
+    for i in range(1, 1001):
+        miscalibration_area += np.average([miscalibration[i - 1], miscalibration[i]]) * 0.001
+
+    return {
+        "fraction_under_thresholds": fraction_under_thresholds,
+        "thresholds": thresholds,
+        "miscalibration_area": miscalibration_area,
+    }
+
+
+def evaluate_log_likelihood(error, uncertainty):
+    log_likelihood = 0
+    optimal_log_likelihood = 0
+
+    for err, unc in zip(error, uncertainty):
+        # Encourage small standard deviations.
+        log_likelihood -= np.log(2 * np.pi * max(0.00001, unc**2)) / 2
+        optimal_log_likelihood -= np.log(2 * np.pi * err**2) / 2
+
+        # Penalize for large error.
+        log_likelihood -= err**2 / (2 * max(0.00001, unc**2))
+        optimal_log_likelihood -= 1 / 2
+
+    return {
+        "log_likelihood": log_likelihood,
+        "optimal_log_likelihood": optimal_log_likelihood,
+        "average_log_likelihood": log_likelihood / len(error),
+        "average_optimal_log_likelihood": optimal_log_likelihood / len(error),
+    }
+
+
 def regression_eval(predicted, labels, SAVE_PATH):  # TODO: add uncertainty_eval fxn with stuff from main branch calculate_metrics fxn, add uncertainty plots, call uncetainty_eval below (3x)
     """
     input: 1D tensor or array of predicted values and labels
