@@ -1,5 +1,4 @@
 import gpytorch
-import numpy as np
 import torch
 from scipy.stats import spearmanr
 from sklearn.metrics import mean_squared_error

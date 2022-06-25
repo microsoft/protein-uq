@@ -1,5 +1,4 @@
 import pickle
-from pathlib import Path
 
 import gpytorch
 import matplotlib.pyplot as plt
@@ -8,8 +7,7 @@ import seaborn as sns
 import torch
 from scipy import stats
 from scipy.stats import spearmanr
-from sklearn import metrics
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 
 def concat_tensor(tensor_list, keep_tensor=False):
@@ -35,8 +33,10 @@ def regression_eval(predicted, labels, SAVE_PATH):  # TODO: add uncertainty_eval
     predicted = np.array(predicted)
     labels = np.array(labels)
 
-    rho, _ = stats.spearmanr(predicted, labels)  # spearman
-    mse = mean_squared_error(predicted, labels)  # MSE
+    rho = stats.spearmanr(labels, predicted).correlation
+    rmse = mean_squared_error(labels, predicted, squared=False)
+    mae = mean_absolute_error(labels, predicted)
+    r2 = r2_score(labels, predicted)
 
     # remove graphing - causes segmentation fault  # TODO: try to reenable plotting (include parities for train, validation, test + learning curves)
     # plt.figure()
@@ -44,7 +44,7 @@ def regression_eval(predicted, labels, SAVE_PATH):  # TODO: add uncertainty_eval
     # sns.scatterplot(x = labels, y = predicted, s = 2, alpha = 0.2)
     # plt.savefig(SAVE_PATH / 'preds_vs_labels.png', dpi = 300)
 
-    return round(rho, 2), round(mse, 2)  # TODO: add more regression metrics to this
+    return round(rho, 2), round(rmse, 2), round(mae, 2), round(r2, 2)
 
 
 def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=None):
@@ -92,9 +92,9 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=N
     SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already # TODO: add saving to ridge and GP
     with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:
         pickle.dump((out, labels), f)
-    rho, mse = regression_eval(predicted=out, labels=labels, SAVE_PATH=SAVE_PATH)
+    rho, rmse, mae, r2 = regression_eval(predicted=out, labels=labels, SAVE_PATH=SAVE_PATH)
 
-    return rho, mse
+    return rho, rmse, mae, r2
 
 
 def evaluate_ridge(X, y, model, SAVE_PATH, y_scaler=None):
@@ -105,8 +105,8 @@ def evaluate_ridge(X, y, model, SAVE_PATH, y_scaler=None):
         preds_mean = y_scaler.inverse_transform(preds_mean.reshape(-1, 1))
         preds_std = preds_std.reshape(-1, 1) * y_scaler.scale_
 
-    rho, mse = regression_eval(predicted=preds_mean, labels=y, SAVE_PATH=SAVE_PATH)
-    return rho, mse
+    rho, rmse, mae, r2 = regression_eval(predicted=preds_mean, labels=y, SAVE_PATH=SAVE_PATH)
+    return rho, rmse, mae, r2
 
 
 def evaluate_gp(X, y, model, likelihood, device, size, SAVE_PATH, y_scaler=None):
@@ -130,5 +130,5 @@ def evaluate_gp(X, y, model, likelihood, device, size, SAVE_PATH, y_scaler=None)
         preds_mean = y_scaler.inverse_transform(preds_mean.reshape(-1, 1))
         preds_std = preds_std.reshape(-1, 1) * y_scaler.scale_
 
-    rho, mse = regression_eval(predicted=preds_mean, labels=y, SAVE_PATH=SAVE_PATH)
-    return rho, mse
+    rho, rmse, mae, r2 = regression_eval(predicted=preds_mean, labels=y, SAVE_PATH=SAVE_PATH)
+    return rho, rmse, mae, r2

@@ -1,7 +1,6 @@
 import argparse
 import random
 import re
-import sys
 from csv import writer
 from pathlib import Path
 
@@ -156,8 +155,8 @@ def train_eval(
             lambda_2,
         )  # initialize model
         lr_trained, _ = train_ridge(train_seq, train_target, lr_model)  # train and pass back trained model
-        train_rho, train_mse = evaluate_ridge(train_seq, train_target, lr_trained, EVAL_PATH / "train", y_scaler)  # evaluate on train
-        test_rho, test_mse = evaluate_ridge(test_seq, test_target, lr_trained, EVAL_PATH / "test", y_scaler)  # evaluate on test
+        train_rho, train_rmse, train_mae, train_r2 = evaluate_ridge(train_seq, train_target, lr_trained, EVAL_PATH / "train", y_scaler)  # evaluate on train
+        test_rho, test_rmse, test_mae, test_r2 = evaluate_ridge(test_seq, test_target, lr_trained, EVAL_PATH / "test", y_scaler)  # evaluate on test
 
     if model == "gp":
         train_seq, train_target = torch.tensor(train_seq).float(), torch.tensor(train_target).float()
@@ -167,8 +166,8 @@ def train_eval(
         gp_model.covar_module.module.base_kernel.lengthscale *= length
         gp_trained, _ = train_gp(train_seq, train_target, gp_model, likelihood, device, length, size)
 
-        train_rho, train_mse = evaluate_gp(train_seq, train_target, gp_trained, likelihood, device, size, EVAL_PATH / "train", y_scaler)  # evaluate on train
-        test_rho, test_mse = evaluate_gp(test_seq, test_target, gp_trained, likelihood, device, size, EVAL_PATH / "test", y_scaler)  # evaluate on test
+        train_rho, train_rmse, train_mae, train_r2 = evaluate_gp(train_seq, train_target, gp_trained, likelihood, device, size, EVAL_PATH / "train", y_scaler)  # evaluate on train
+        test_rho, test_rmse, test_mae, test_r2 = evaluate_gp(test_seq, test_target, gp_trained, likelihood, device, size, EVAL_PATH / "test", y_scaler)  # evaluate on test
 
     if model == "cnn":
         if representation == "ohe":
@@ -257,13 +256,13 @@ def train_eval(
             EVAL_PATH,
         )
         # evaluate
-        train_rho, train_mse = evaluate_cnn(train_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "train", y_scaler)
-        test_rho, test_mse = evaluate_cnn(test_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "test", y_scaler)
+        train_rho, train_rmse, train_mae, train_r2 = evaluate_cnn(train_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "train", y_scaler)
+        test_rho, test_rmse, test_mae, test_r2 = evaluate_cnn(test_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "test", y_scaler)
 
     print("done training and testing: dataset: {0} model: {1} split: {2} \n".format(dataset, model, split))
     print("full results saved at: ", EVAL_PATH)
-    print("train stats: Spearman: %.2f MSE: %.2f " % (train_rho, train_mse))
-    print("test stats: Spearman: %.2f MSE: %.2f " % (test_rho, test_mse))
+    print(f"train stats: Spearman: {train_rho:.2f} RMSE: {train_rmse:.2f} MAE: {train_mae:.2f} R2: {train_r2:.2f}")
+    print(f"test stats: Spearman: {test_rho:.2f} RMSE: {test_rmse:.2f} MAE: {test_mae:.2f} R2: {test_r2:.2f}")
 
     # TODO: write out prediction files for train, val, test
     # TODO: make sure all outputs in good format to read in for auto-generating plots
