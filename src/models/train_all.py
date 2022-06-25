@@ -189,21 +189,21 @@ def train_eval(
         if representation == "ohe":
             collate = ASCollater(vocab, Tokenizer(vocab), pad=True)
             train_iterator = DataLoader(
-                SequenceDataset(train),
+                SequenceDataset(train, dataset),
                 collate_fn=collate,
                 batch_size=batch_size,
                 shuffle=True,
                 num_workers=4,
             )
             val_iterator = DataLoader(
-                SequenceDataset(val),
+                SequenceDataset(val, dataset),
                 collate_fn=collate,
                 batch_size=batch_size,
                 shuffle=True,
                 num_workers=4,
             )
             test_iterator = DataLoader(
-                SequenceDataset(test),
+                SequenceDataset(test, dataset),
                 collate_fn=collate,
                 batch_size=batch_size,
                 shuffle=True,

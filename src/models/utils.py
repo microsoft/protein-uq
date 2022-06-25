@@ -210,16 +210,26 @@ def load_esm_dataset(dataset, model, split, mean, mut_mean, flip, gb1_shorten=Fa
     return train_esm_data, val_esm_data, test_esm_data, max_length
 
 
-class SequenceDataset(Dataset):  # TODO: add dataset_name to constructor and modify as in X_utils for meltome + AAV
-    def __init__(self, data):
+class SequenceDataset(Dataset):
+    def __init__(self, data, dataset_name):
         self.data = data
+        self.dataset_name = dataset_name
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, index):
         row = self.data.iloc[index]
-        return row["sequence"], row["target"]
+        if self.dataset_name == "aav":
+            return (
+                row["sequence"][560:604],
+                row["target"],
+            )  # only look at part of sequence that changes
+        elif self.dataset_name == "meltome":
+            max_len = 1024  # truncate to first 1024 characters
+            return row["sequence"][:max_len], row["target"]
+        else:
+            return row["sequence"], row["target"]
 
 
 class ESMSequenceDataset(Dataset):
