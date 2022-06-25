@@ -14,7 +14,6 @@ from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader
 
 from evals import evaluate_cnn, evaluate_gp, evaluate_ridge
-from filepaths import RESULTS_DIR
 from models import BayesianRidgeRegression, ExactGPModel, FluorescenceModel
 from train import train_cnn, train_gp, train_ridge
 from utils import (ASCollater, ESMSequenceMeanDataset, SequenceDataset,
@@ -44,7 +43,7 @@ def create_parser():
     # General
     parser.add_argument("--split", type=str)
     parser.add_argument("--model", choices=["ridge", "gp", "cnn"], type=str)
-    parser.add_argument("--representation", choices=["ohe", "esm"], type=str)
+    parser.add_argument("--representation", choices=["ohe", "esm"], type=str)  # TODO: separate into esm_mean and esm_full
     parser.add_argument("--gpu", type=int, nargs="+", default=[0])
     parser.add_argument(
         "--uncertainty",
@@ -52,6 +51,8 @@ def create_parser():
         type=str,
     )
     parser.add_argument("--scale", action="store_true")
+    parser.add_argument("--results_dir", type=str, default="test_results")
+    parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--flip", action="store_true")  # for flipping mut-des and des-mut
     parser.add_argument("--gb1_shorten", action="store_true")
     # ESM
@@ -84,6 +85,7 @@ def train_eval(
     split,
     device,
     scale,
+    results_dir,
     mean,
     mut_mean,
     batch_size,
@@ -104,16 +106,9 @@ def train_eval(
     gpu,
 ):
 
-    results_dir = Path(RESULTS_DIR)
+    results_dir = Path(results_dir)
     EVAL_PATH = results_dir / dataset / model / split
     EVAL_PATH.mkdir(parents=True, exist_ok=True)
-
-    # if mean:
-    #     model += "_mean"  # TODO: if including this, need to modify below blocks to have .startswith()
-    # if mut_mean:
-    #     model += "_mut_mean"
-    # if flip:
-    #     split += "_flipped"
 
     # load data
     if representation == "esm":
@@ -136,7 +131,7 @@ def train_eval(
             test_seq, test_target = get_data(test, max_length, encode_pad=False, one_hots=True)
 
     # scale data
-    if scale and model in ["ridge", "gp"]:  # TODO: should there also be a scale option for cnn?
+    if scale and (model in ["ridge", "gp"]):  # TODO: scale option for CNN
         x_scaler = StandardScaler()
         y_scaler = StandardScaler()
         train_seq = x_scaler.fit_transform(train_seq)
@@ -179,7 +174,7 @@ def train_eval(
         if representation == "ohe":
             cnn_input_type = "ohe"
         if representation == "esm":
-            cnn_input_type = "esm_mean"  # TODO: update if adding esm_full option
+            cnn_input_type = "esm_mean"  # TODO: separate into esm_mean and esm_full
             input_size = 1280  # size of ESM mean embeddings is fixed and different from 1024 default for OHE
             
         lr = alpha = ""  # get rid of unused variables
@@ -208,7 +203,7 @@ def train_eval(
                 shuffle=True,
                 num_workers=4,
             )
-        elif representation == "esm":  # TODO: add option to use esm_full
+        elif representation == "esm":  # TODO: separate into esm_mean and esm_full
             train_iterator = DataLoader(
                 ESMSequenceMeanDataset(train),
                 batch_size=batch_size,
@@ -307,9 +302,10 @@ def main(args):
         split,
         device,
         args.scale,
+        args.results_dir,
         args.mean,
         args.mut_mean,
-        256,  # batch size
+        args.batch_size,
         args.flip,
         args.lr,
         args.kernel_size,
@@ -337,4 +333,4 @@ if __name__ == "__main__":
     if (args.uncertainty in ["ridge", "gp"]) and (args.model == "cnn"):
         raise ValueError("The uncertainty method you selected doesn't work with CNN.")
 
-    main(args)  # TODO: remove X_ files, sort imports in all files, lint/format all files, make config files/make files
+    main(args)  # TODO: remove X_ files, lint/format all files, make config files or "make" files
