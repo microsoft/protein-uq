@@ -1,8 +1,8 @@
-import torch
-import numpy as np
-from sklearn.metrics import mean_squared_error
-from scipy.stats import spearmanr
 import gpytorch
+import numpy as np
+import torch
+from scipy.stats import spearmanr
+from sklearn.metrics import mean_squared_error
 
 
 def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer, epoch_num, MODEL_PATH):

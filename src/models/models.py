@@ -1,13 +1,8 @@
-import sys
-
-from filepaths import SEQ_MODELS
-sys.path.append(SEQ_MODELS)
-from sequence_models.structure import Attention1d
-
 import gpytorch
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from sequence_models.structure import Attention1d
 from sklearn.linear_model import BayesianRidge
 
 

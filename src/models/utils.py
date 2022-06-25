@@ -1,14 +1,15 @@
+import re
+import sys
+from pathlib import Path
+from typing import Any, List
+
 import numpy as np
 import pandas as pd
-import sys
-import re
-from pathlib import Path
-from filepaths import DATA_DIR, EMBEDDING_DIR
-from typing import List, Any
-
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Dataset, TensorDataset
+
+from filepaths import DATA_DIR, EMBEDDING_DIR
 
 vocab = "ARNDCQEGHILKMFPSTWYVXU"
 pad_index = len(vocab)

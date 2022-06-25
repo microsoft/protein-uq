@@ -14,12 +14,11 @@ from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader
 
 from evals import evaluate_cnn, evaluate_gp, evaluate_ridge
-from filepaths import BASELINE_DIR, RESULTS_DIR
+from filepaths import RESULTS_DIR
 from models import BayesianRidgeRegression, ExactGPModel, FluorescenceModel
 from train import train_cnn, train_gp, train_ridge
-from utils import ASCollater, ESMSequenceMeanDataset, SequenceDataset, Tokenizer, get_data, load_dataset, load_esm_dataset, vocab
-
-sys.path.append(BASELINE_DIR)
+from utils import (ASCollater, ESMSequenceMeanDataset, SequenceDataset,
+                   Tokenizer, get_data, load_dataset, load_esm_dataset, vocab)
 
 split_dict = {
     "aav_1": "des_mut",
