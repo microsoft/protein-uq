@@ -58,7 +58,6 @@ def create_parser():
     parser.add_argument("--mean", action="store_true")
     parser.add_argument("--mut_mean", action="store_true")
     # CNN hyperparameters
-    parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--kernel_size", type=int, default=5)
     parser.add_argument("--input_size", type=int, default=1024)
     parser.add_argument("--dropout", type=float, default=0.0)
@@ -89,7 +88,6 @@ def train_eval(
     mut_mean,
     batch_size,
     flip,
-    lr,
     kernel_size,
     input_size,
     dropout,
@@ -142,7 +140,7 @@ def train_eval(
         y_scaler = None
 
     if model in ["ridge", "gp"]:
-        lr = kernel_size = input_size = dropout = ""  # get rid of unused variables
+        kernel_size = input_size = dropout = ""  # get rid of unused variables
 
     # train and evaluate models
     if model == "ridge":
@@ -176,7 +174,6 @@ def train_eval(
             cnn_input_type = "esm_mean"  # TODO: separate into esm_mean and esm_full
             input_size = 1280  # size of ESM mean embeddings is fixed and different from 1024 default for OHE
 
-        lr = alpha = ""  # get rid of unused variables
         if dataset == "meltome":
             batch_size = 30  # smaller batch sizes for meltome since seqs are long
         if representation == "ohe":
@@ -270,9 +267,9 @@ def train_eval(
         writer(f).writerow(
             [
                 dataset,
+                split,
                 model,
                 uncertainty,
-                split,
                 train_rho,
                 train_rmse,
                 train_mae,
@@ -309,7 +306,6 @@ def main(args):
         args.mut_mean,
         args.batch_size,
         args.flip,
-        args.lr,
         args.kernel_size,
         args.input_size,
         args.dropout,
