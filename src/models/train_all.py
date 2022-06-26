@@ -264,7 +264,6 @@ def train_eval(
     print(f"train stats: Spearman: {train_rho:.2f} RMSE: {train_rmse:.2f} MAE: {train_mae:.2f} R2: {train_r2:.2f}")
     print(f"test stats: Spearman: {test_rho:.2f} RMSE: {test_rmse:.2f} MAE: {test_mae:.2f} R2: {test_r2:.2f}")
 
-    # TODO: write out prediction files for train, val, test
     # TODO: make sure all outputs in good format to read in for auto-generating plots
 
     with open(results_dir / (dataset + "_results.csv"), "a", newline="") as f:
