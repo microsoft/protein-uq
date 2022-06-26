@@ -6,9 +6,9 @@ from sklearn.metrics import mean_squared_error
 
 def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer, epoch_num, MODEL_PATH):
 
-    patience = 20
+    patience = 5  # TODO: change back to 20
     p = 0
-    best_rho = -1
+    best_rho = -1.1
     model = model.to(device)
 
     def step(model, batch, train=True):

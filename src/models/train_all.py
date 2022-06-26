@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.preprocessing import StandardScaler
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 
 from evals import evaluate_cnn, evaluate_gp, evaluate_ridge
 from models import BayesianRidgeRegression, ExactGPModel, FluorescenceModel
@@ -128,13 +128,37 @@ def train_eval(
             test_seq, test_target = get_data(test, max_length, encode_pad=False, one_hots=True)
 
     # scale data
-    if scale and (model in ["ridge", "gp"]):  # TODO: scale option for CNN
+    if scale and (model in ["ridge", "gp"]):
         x_scaler = StandardScaler()
         y_scaler = StandardScaler()
         train_seq = x_scaler.fit_transform(train_seq)
         test_seq = x_scaler.transform(test_seq)
         train_target = y_scaler.fit_transform(np.array(train_target)[:, None])[:, 0]
         test_target = y_scaler.transform(np.array(test_target)[:, None])[:, 0]
+    elif scale and (model == "cnn") and (representation == "esm"):
+        X_train_mean = train.tensors[0].mean(axis=0)
+        X_train_std = train.tensors[0].std(axis=0)
+        y_train_mean = train.tensors[1].mean(axis=0)
+        y_train_std = train.tensors[1].std(axis=0)
+
+        train_seq_new = (train.tensors[0] - X_train_mean) / X_train_std
+        train_target_new = (train.tensors[1] - y_train_mean) / y_train_std
+        train = TensorDataset(train_seq_new, train_target_new)
+        val_seq_new = (val.tensors[0] - X_train_mean) / X_train_std
+        val_target_new = (val.tensors[1] - y_train_mean) / y_train_std
+        val = TensorDataset(val_seq_new, val_target_new)
+        test_seq_new = (test.tensors[0] - X_train_mean) / X_train_std
+        test_target_new = (test.tensors[1] - y_train_mean) / y_train_std
+        test = TensorDataset(test_seq_new, test_target_new)
+
+        x_scaler = (X_train_mean, X_train_std)
+        y_scaler = (y_train_mean, y_train_std)
+    elif scale and (model == "cnn") and (representation == "ohe"):
+        x_scaler = None
+        y_scaler = StandardScaler()
+        train.target = y_scaler.fit_transform(train.target.values.reshape(-1, 1))
+        val.target = y_scaler.fit_transform(val.target.values.reshape(-1, 1))
+        test.target = y_scaler.transform(test.target.values.reshape(-1, 1))
     else:
         x_scaler = None
         y_scaler = None
@@ -257,7 +281,7 @@ def train_eval(
         test_rho, test_rmse, test_mae, test_r2 = evaluate_cnn(test_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "test", y_scaler)
 
     print("done training and testing: dataset: {0} model: {1} split: {2} \n".format(dataset, model, split))
-    print("full results saved at: ", EVAL_PATH)
+    print("full results saved at: ", EVAL_PATH)  # TODO: make sure this path is different for each model (separate CNN OHE/ESM, each uncertainty type, etc)
     print(f"train stats: Spearman: {train_rho:.2f} RMSE: {train_rmse:.2f} MAE: {train_mae:.2f} R2: {train_r2:.2f}")
     print(f"test stats: Spearman: {test_rho:.2f} RMSE: {test_rmse:.2f} MAE: {test_mae:.2f} R2: {test_r2:.2f}")
 

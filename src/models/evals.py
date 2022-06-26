@@ -137,9 +137,14 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=N
     labels = torch.cat(tgts).cpu().numpy()
 
     if y_scaler:
-        labels = y_scaler.inverse_transform(labels)
-        out = y_scaler.inverse_transform(out)
-        # preds_std = preds_std.reshape(-1, 1) * y_scaler.scale_ # TODO: unscale st dev (make sure st dev and not var)
+        if isinstance(y_scaler, tuple):
+            labels = labels * y_scaler[1].numpy() + y_scaler[0].numpy()
+            out = out * y_scaler[1].numpy() + y_scaler[0].numpy()
+            # preds_std = preds_std.reshape(-1, 1) * y_scaler[1]  # TODO: calculate std of predictions
+        else:
+            labels = y_scaler.inverse_transform(labels.reshape(-1, 1))
+            out = y_scaler.inverse_transform(out.reshape(-1, 1))
+            # preds_std = preds_std.reshape(-1, 1) * y_scaler.scale_  # TODO: calculate std of predictions
 
     SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already
     with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:
