@@ -6,7 +6,7 @@ from sklearn.metrics import mean_squared_error
 
 def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer, epoch_num, MODEL_PATH):
 
-    patience = 5  # TODO: change back to 20
+    patience = 3  # TODO: change patience back to 20 once done debugging
     p = 0
     best_rho = -1.1
     model = model.to(device)
@@ -76,7 +76,7 @@ def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer,
 
     nsteps = 0
     e = 0
-    bestmodel_save = MODEL_PATH / "bestmodel.tar"  # path to save best model
+    bestmodel_save = MODEL_PATH / "bestmodel.tar"  # path to save best model  # TODO: make sure path reflects if multiple members of ensemble
     for e in range(epoch_num):
         s, val_rho = epoch(model, train=True, current_step=nsteps)
         # print(val_rho)

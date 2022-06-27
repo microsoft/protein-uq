@@ -6,6 +6,7 @@ from typing import Any, List
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, TensorDataset
 
@@ -320,7 +321,18 @@ def evidential_loss(mu, v, alpha, beta, targets, lam=1, epsilon=1e-4):
     L_REG = reg  # torch.mean(reg, dim=-1)
 
     # Loss = L_NLL + L_REG
-    # TODO If we want to optimize the dual- of the objective use the line below:
+    # TODO: If we want to optimize the dual- of the objective use the line below:
     loss = L_NLL + lam * (L_REG - epsilon)
 
     return torch.mean(loss)
+
+
+def activate_dropout(module: nn.Module, dropout_prob: float):
+    """
+    Set p of dropout layers and set to train mode during inference for uncertainty estimation.
+    :param model: A :class:`~chemprop.models.model.MoleculeModel`.
+    :param dropout_prob: A float on (0,1) indicating the dropout probability.
+    """
+    if isinstance(module, nn.Dropout):
+        module.p = dropout_prob
+        module.train()

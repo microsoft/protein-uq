@@ -7,7 +7,9 @@ import seaborn as sns
 import torch
 from scipy import stats
 from scipy.stats import spearmanr
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+from utils import activate_dropout
 
 
 def concat_tensor(tensor_list, keep_tensor=False):
@@ -99,8 +101,10 @@ def regression_eval(predicted, labels, SAVE_PATH):  # TODO: add uncertainty_eval
     return round(rho, 2), round(rmse, 2), round(mae, 2), round(r2, 2)
 
 
-def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=None):
+def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=None, dropout=0.0):  # TOOD: write separate function to evaluate cnn ensemble (based on prediction files that were written out)
     """run data through model and print eval stats"""
+
+    calculate_std = False
 
     model = model.to(device)
     bestmodel_save = MODEL_PATH / "bestmodel.tar"
@@ -124,31 +128,54 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=N
 
     model = model.eval()
 
-    outputs = []
-    tgts = []
-    n_seen = 0
-    for i, batch in enumerate(data_iterator):
-        output, tgt = test_step(model, batch)
-        outputs.append(output)
-        tgts.append(tgt)
-        n_seen += len(batch[0])
+    # Turn on dropout for inference to estimate uncertainty
+    if dropout > 0:
+        def activate_dropout_(model):
+            return activate_dropout(model, dropout)
+        model.apply(activate_dropout_)
+        num_evals = 5
+        out_list = []
+        calculate_std = True
+    else:
+        num_evals = 1
 
-    out = torch.cat(outputs).numpy()
-    labels = torch.cat(tgts).cpu().numpy()
+    for i in range(num_evals):
+        np.random.seed(i)
+        torch.manual_seed(i)
+        outputs = []
+        tgts = []
+        n_seen = 0
+        for i, batch in enumerate(data_iterator):
+            output, tgt = test_step(model, batch)
+            outputs.append(output)
+            tgts.append(tgt)
+            n_seen += len(batch[0])
+
+        out = torch.cat(outputs).numpy()
+        labels = torch.cat(tgts).cpu().numpy()
+
+        if dropout > 0:
+            out_list.append(out)
+
+    if dropout > 0:
+        out = np.mean(out_list, axis=0)
+        preds_std = np.std(out_list, axis=0)
 
     if y_scaler:
         if isinstance(y_scaler, tuple):
             labels = labels * y_scaler[1].numpy() + y_scaler[0].numpy()
             out = out * y_scaler[1].numpy() + y_scaler[0].numpy()
-            # preds_std = preds_std.reshape(-1, 1) * y_scaler[1]  # TODO: calculate std of predictions
+            if calculate_std:
+                preds_std = preds_std.reshape(-1, 1) * y_scaler[1]
         else:
             labels = y_scaler.inverse_transform(labels.reshape(-1, 1))
             out = y_scaler.inverse_transform(out.reshape(-1, 1))
-            # preds_std = preds_std.reshape(-1, 1) * y_scaler.scale_  # TODO: calculate std of predictions
+            if calculate_std:
+                preds_std = preds_std.reshape(-1, 1) * y_scaler.scale_
 
-    SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already
+    SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already  # TODO: make sure preds_std and out are correct shape with dropout
     with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:
-        pickle.dump((out, labels), f)
+        pickle.dump((out, labels), f)  # TODO: write std to file if applicable
     rho, rmse, mae, r2 = regression_eval(predicted=out, labels=labels, SAVE_PATH=SAVE_PATH)
 
     return rho, rmse, mae, r2
@@ -164,7 +191,7 @@ def evaluate_ridge(X, y, model, SAVE_PATH, y_scaler=None):
 
     SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already
     with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:
-        pickle.dump((preds_mean, y), f)
+        pickle.dump((preds_mean, y), f)  # TODO: write std to file if applicable
     rho, rmse, mae, r2 = regression_eval(predicted=preds_mean, labels=y, SAVE_PATH=SAVE_PATH)
 
     return rho, rmse, mae, r2
@@ -193,7 +220,7 @@ def evaluate_gp(X, y, model, likelihood, device, size, SAVE_PATH, y_scaler=None)
 
     SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already
     with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:
-        pickle.dump((preds_mean, y), f)
+        pickle.dump((preds_mean, y), f)  # TODO: write std to file if applicable
     rho, rmse, mae, r2 = regression_eval(predicted=preds_mean, labels=y, SAVE_PATH=SAVE_PATH)
 
     return rho, rmse, mae, r2

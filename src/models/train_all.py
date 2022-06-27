@@ -104,7 +104,7 @@ def train_eval(
 ):
 
     results_dir = Path(results_dir)
-    EVAL_PATH = results_dir / dataset / model / split
+    EVAL_PATH = results_dir / dataset / split / model / representation / uncertainty
     EVAL_PATH.mkdir(parents=True, exist_ok=True)
 
     # load data
@@ -243,7 +243,7 @@ def train_eval(
                 num_workers=4,
             )
         # initialize model
-        cnn_model = FluorescenceModel(len(vocab), kernel_size, input_size, dropout, input_type=cnn_input_type)
+        cnn_model = FluorescenceModel(len(vocab), kernel_size, input_size, 0.0, input_type=cnn_input_type)  # always use dropout = 0.0 for training
         # create optimizer and loss function
         optimizer = optim.Adam(
             [
@@ -276,12 +276,13 @@ def train_eval(
             100,
             EVAL_PATH,
         )
+
         # evaluate
         train_rho, train_rmse, train_mae, train_r2 = evaluate_cnn(train_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "train", y_scaler)
-        test_rho, test_rmse, test_mae, test_r2 = evaluate_cnn(test_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "test", y_scaler)
+        test_rho, test_rmse, test_mae, test_r2 = evaluate_cnn(test_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "test", y_scaler, dropout=dropout)
 
     print("done training and testing: dataset: {0} model: {1} split: {2} \n".format(dataset, model, split))
-    print("full results saved at: ", EVAL_PATH)  # TODO: make sure this path is different for each model (separate CNN OHE/ESM, each uncertainty type, etc)
+    print("full results saved at: ", EVAL_PATH)
     print(f"train stats: Spearman: {train_rho:.2f} RMSE: {train_rmse:.2f} MAE: {train_mae:.2f} R2: {train_r2:.2f}")
     print(f"test stats: Spearman: {test_rho:.2f} RMSE: {test_rmse:.2f} MAE: {test_mae:.2f} R2: {test_r2:.2f}")
 
@@ -294,6 +295,7 @@ def train_eval(
                 split,
                 model,
                 uncertainty,
+                dropout,
                 train_rho,
                 train_rmse,
                 train_mae,
@@ -302,7 +304,6 @@ def train_eval(
                 test_rmse,
                 test_mae,
                 test_r2,
-                dropout,
             ]
         )
 
@@ -315,35 +316,67 @@ def main(args):
 
     print("dataset: {0} model: {1} split: {2} \n".format(dataset, args.model, split))
 
-    random.seed(0)
-    torch.manual_seed(0)
-    train_eval(
-        dataset,
-        args.model,
-        args.representation,
-        args.uncertainty,
-        split,
-        device,
-        args.scale,
-        args.results_dir,
-        args.mean,
-        args.mut_mean,
-        args.batch_size,
-        args.flip,
-        args.kernel_size,
-        args.input_size,
-        args.dropout,
-        args.gb1_shorten,
-        args.max_iter,
-        args.tol,
-        args.alpha_1,
-        args.alpha_2,
-        args.lambda_1,
-        args.lambda_2,
-        args.size,
-        args.length,
-        args.gpu,
-    )
+    if args.uncertainty == "ensemble":
+        for i in range(5):
+            random.seed(i)
+            torch.manual_seed(i)
+            train_eval(
+                dataset,
+                args.model,
+                args.representation,
+                args.uncertainty,
+                split,
+                device,
+                args.scale,
+                args.results_dir,
+                args.mean,
+                args.mut_mean,
+                args.batch_size,
+                args.flip,
+                args.kernel_size,
+                args.input_size,
+                args.dropout,
+                args.gb1_shorten,
+                args.max_iter,
+                args.tol,
+                args.alpha_1,
+                args.alpha_2,
+                args.lambda_1,
+                args.lambda_2,
+                args.size,
+                args.length,
+                args.gpu,
+            )  # TODO: call special CNN eval function for ensemble
+    else:
+        random.seed(0)
+        torch.manual_seed(0)
+        train_eval(
+            dataset,
+            args.model,
+            args.representation,
+            args.uncertainty,
+            split,
+            device,
+            args.scale,
+            args.results_dir,
+            args.mean,
+            args.mut_mean,
+            args.batch_size,
+            args.flip,
+            args.kernel_size,
+            args.input_size,
+            args.dropout,
+            args.gb1_shorten,
+            args.max_iter,
+            args.tol,
+            args.alpha_1,
+            args.alpha_2,
+            args.lambda_1,
+            args.lambda_2,
+            args.size,
+            args.length,
+            args.gpu,
+        )
 
 
 if __name__ == "__main__":
@@ -354,5 +387,9 @@ if __name__ == "__main__":
         raise ValueError("The uncertainty method you selected only works with CNN.")
     if (args.uncertainty in ["ridge", "gp"]) and (args.model == "cnn"):
         raise ValueError("The uncertainty method you selected doesn't work with CNN.")
+    if (args.uncertainty == "dropout") and (args.dropout == 0.0):
+        raise ValueError("Dropout uncertainty requires dropout to be non-zero.")
+    if (args.uncertainty != "dropout") and (args.dropout != 0.0):
+        raise ValueError("Cannot use nonzero dropout with non-dropout uncertainty.")
 
     main(args)  # TODO: remove X_ files, lint/format all files, make config files or "make" files

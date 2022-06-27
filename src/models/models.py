@@ -95,7 +95,7 @@ class LengthMaxPool1D(nn.Module):
         return x
 
 
-class FluorescenceModel(nn.Module):  # TODO: refactor ensemble, MVE, evidential, SVI, dropout into this
+class FluorescenceModel(nn.Module):  # TODO: refactor ensemble, dropout, MVE, evidential, SVI into this
     def __init__(self, n_tokens, kernel_size, input_size, dropout, input_type="ohe"):
         super(FluorescenceModel, self).__init__()
         self.encoder = MaskedConv1d(n_tokens, input_size, kernel_size=kernel_size)
