@@ -321,7 +321,7 @@ def evidential_loss(mu, v, alpha, beta, targets, lam=1, epsilon=1e-4):
     L_REG = reg  # torch.mean(reg, dim=-1)
 
     # Loss = L_NLL + L_REG
-    # TODO: If we want to optimize the dual- of the objective use the line below:
+    # If we want to optimize the dual- of the objective use the line below:
     loss = L_NLL + lam * (L_REG - epsilon)
 
     return torch.mean(loss)

@@ -173,9 +173,9 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=N
             if calculate_std:
                 preds_std = preds_std.reshape(-1, 1) * y_scaler.scale_
 
-    SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already  # TODO: make sure preds_std and out are correct shape with dropout
+    SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already
     with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:
-        pickle.dump((out, labels), f)  # TODO: write std to file if applicable
+        pickle.dump((labels, out, preds_std), f)
     rho, rmse, mae, r2 = regression_eval(predicted=out, labels=labels, SAVE_PATH=SAVE_PATH)
 
     return rho, rmse, mae, r2
@@ -191,7 +191,7 @@ def evaluate_ridge(X, y, model, SAVE_PATH, y_scaler=None):
 
     SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already
     with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:
-        pickle.dump((preds_mean, y), f)  # TODO: write std to file if applicable
+        pickle.dump((y, preds_mean, preds_std), f)
     rho, rmse, mae, r2 = regression_eval(predicted=preds_mean, labels=y, SAVE_PATH=SAVE_PATH)
 
     return rho, rmse, mae, r2
@@ -220,7 +220,7 @@ def evaluate_gp(X, y, model, likelihood, device, size, SAVE_PATH, y_scaler=None)
 
     SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already
     with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:
-        pickle.dump((preds_mean, y), f)  # TODO: write std to file if applicable
+        pickle.dump((y, preds_mean, preds_std), f)
     rho, rmse, mae, r2 = regression_eval(predicted=preds_mean, labels=y, SAVE_PATH=SAVE_PATH)
 
     return rho, rmse, mae, r2

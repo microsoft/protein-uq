@@ -278,7 +278,7 @@ def train_eval(
         )
 
         # evaluate
-        train_rho, train_rmse, train_mae, train_r2 = evaluate_cnn(train_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "train", y_scaler)
+        train_rho, train_rmse, train_mae, train_r2 = evaluate_cnn(train_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "train", y_scaler, dropout=dropout)
         test_rho, test_rmse, test_mae, test_r2 = evaluate_cnn(test_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "test", y_scaler, dropout=dropout)
 
     print("done training and testing: dataset: {0} model: {1} split: {2} \n".format(dataset, model, split))
