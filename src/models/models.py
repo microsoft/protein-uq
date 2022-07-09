@@ -1,9 +1,12 @@
+from dataclasses import dataclass
+
 import gpytorch
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from sequence_models.structure import Attention1d
 from sklearn.linear_model import BayesianRidge
+from torch import distributions
 
 
 class ESMAttention1d(nn.Module):
@@ -95,19 +98,84 @@ class LengthMaxPool1D(nn.Module):
         return x
 
 
-class FluorescenceModel(nn.Module):  # TODO: refactor ensemble, dropout, MVE, evidential, SVI into this
-    def __init__(self, n_tokens, kernel_size, input_size, dropout, input_type="ohe"):
+class LinearVariational(nn.Module):
+    def __init__(self, in_features, out_features, loss_accumulator, n_batches, bias=True):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.include_bias = bias
+        self.loss_accumulator = loss_accumulator
+        self.n_batches = n_batches
+
+        if getattr(loss_accumulator, "accumulated_kl_div", None) is None:
+            loss_accumulator.accumulated_kl_div = 0
+
+        self.w_mu = nn.Parameter(torch.FloatTensor(in_features, out_features).normal_(mean=0, std=0.001))
+        # proxy for variance
+        # log(1 + exp(ρ))◦ eps
+        self.w_p = nn.Parameter(torch.FloatTensor(in_features, out_features).normal_(mean=-2.5, std=0.001))
+        if self.include_bias:
+            self.b_mu = nn.Parameter(torch.zeros(out_features))
+            self.b_p = nn.Parameter(torch.zeros(out_features))
+
+    def reparameterize(self, mu, p):
+        sigma = torch.log(1 + torch.exp(p))
+        eps = torch.randn_like(sigma)
+        return mu + (eps * sigma)
+
+    def kl_divergence(self, z, mu_theta, p_theta, prior_sd=1):
+        log_prior = distributions.Normal(0, prior_sd).log_prob(z)
+        log_p_q = distributions.Normal(mu_theta, torch.log(1 + torch.exp(p_theta))).log_prob(z)
+        return (log_p_q - log_prior).mean() / self.n_batches
+
+    def forward(self, x):
+        w = self.reparameterize(self.w_mu, self.w_p)
+
+        if self.include_bias:
+            b = self.reparameterize(self.b_mu, self.b_p)
+        else:
+            b = 0
+
+        z = x @ w + b
+
+        self.loss_accumulator.accumulated_kl_div += self.kl_divergence(
+            w,
+            self.w_mu,
+            self.w_p,
+        )
+        if self.include_bias:
+            self.loss_accumulator.accumulated_kl_div += self.kl_divergence(
+                b,
+                self.b_mu,
+                self.b_p,
+            )
+        return z
+
+
+@dataclass
+class KL:
+    accumulated_kl_div = 0
+
+
+class FluorescenceModel(nn.Module):  # TODO: refactor ensemble, SVI into this
+    def __init__(self, n_tokens, kernel_size, input_size, dropout, input_type="ohe", mve=False, evidential=False):
         super(FluorescenceModel, self).__init__()
         self.encoder = MaskedConv1d(n_tokens, input_size, kernel_size=kernel_size)
         self.esm_conv = nn.Conv1d(1, 1, kernel_size, padding=2)  # in_channels = out_channels = 1
         self.embedding = LengthMaxPool1D(linear=True, in_dim=input_size, out_dim=input_size * 2)
-        self.decoder = nn.Linear(input_size * 2, 1)
+        if mve:
+            output_size = 2
+        elif evidential:
+            output_size = 4
+        else:
+            output_size = 1
+        self.decoder = nn.Linear(input_size * 2, output_size)
         self.n_tokens = n_tokens  # length of vocab (e.g. 22)
-        self.dropout = nn.Dropout(dropout)  # TODO: make dropout work at inference time
+        self.dropout = nn.Dropout(dropout)
         self.input_size = input_size  # input vector size (1024 for one hot encodings, 1280 for ESM mean)
         self.input_type = input_type  # choose from "cnn", "esm_mean", or "esm_full"
 
-    def forward(self, x, mask):
+    def forward(self, x, mask, evidential=False):
         # encoder
         if self.input_type == "ohe":
             x = F.relu(self.encoder(x, input_mask=mask.repeat(self.n_tokens, 1, 1).permute(1, 2, 0)))
@@ -121,6 +189,18 @@ class FluorescenceModel(nn.Module):  # TODO: refactor ensemble, dropout, MVE, ev
         x = self.dropout(x)
         # decoder
         output = self.decoder(x)
+
+        if evidential:
+            min_val = 1e-6
+            # Split the outputs into the four distribution parameters
+            means, loglambdas, logalphas, logbetas = torch.split(output, output.shape[1] // 4, dim=1)
+            lambdas = torch.nn.Softplus()(loglambdas) + min_val  # also called nu or v
+            alphas = torch.nn.Softplus()(logalphas) + min_val + 1  # add 1 for numerical contraints of Gamma function
+            betas = torch.nn.Softplus()(logbetas) + min_val
+
+            # Return these parameters as the output of the model
+            output = torch.stack((means, lambdas, alphas, betas), dim=2).view(output.size())
+
         return output
 
 

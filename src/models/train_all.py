@@ -1,4 +1,5 @@
 import argparse
+import functools
 import random
 import re
 from csv import writer
@@ -16,7 +17,8 @@ from evals import evaluate_cnn, evaluate_gp, evaluate_ridge
 from models import BayesianRidgeRegression, ExactGPModel, FluorescenceModel
 from train import train_cnn, train_gp, train_ridge
 from utils import (ASCollater, ESMSequenceMeanDataset, SequenceDataset,
-                   Tokenizer, get_data, load_dataset, load_esm_dataset, vocab)
+                   Tokenizer, evidential_loss, get_data, load_dataset, load_esm_dataset,
+                   negative_log_likelihood, vocab)
 
 split_dict = {
     "aav_1": "des_mut",
@@ -71,6 +73,7 @@ def create_parser():
     # GP hyperparameters
     parser.add_argument("--size", type=int, default=0)
     parser.add_argument("--length", type=float, default=1.0)
+    parser.add_argument("--regularizer_coeff", type=float, default=1.0)
 
     return parser
 
@@ -101,6 +104,7 @@ def train_eval(
     size,
     length,
     gpu,
+    regularizer_coeff,
 ):
 
     results_dir = Path(results_dir)
@@ -242,8 +246,15 @@ def train_eval(
                 shuffle=True,
                 num_workers=4,
             )
-        # initialize model
-        cnn_model = FluorescenceModel(len(vocab), kernel_size, input_size, 0.0, input_type=cnn_input_type)  # always use dropout = 0.0 for training
+        # initialize model (always use dropout = 0.0 for training)
+        cnn_model = FluorescenceModel(len(vocab), kernel_size, input_size, 0.0, input_type=cnn_input_type,
+                                      mve=uncertainty == "mve", evidential=uncertainty == "evidential")
+        if uncertainty == "mve":
+            criterion = negative_log_likelihood
+        elif uncertainty == "evidential":
+            criterion = functools.partial(evidential_loss, lam=regularizer_coeff)
+        else:
+            criterion = nn.MSELoss()
         # create optimizer and loss function
         optimizer = optim.Adam(
             [
@@ -264,7 +275,6 @@ def train_eval(
                 },
             ]
         )
-        criterion = nn.MSELoss()
         # train and pass back epochs trained - for CNN, save model
         epochs_trained = train_cnn(
             train_iterator,
@@ -275,11 +285,15 @@ def train_eval(
             optimizer,
             100,
             EVAL_PATH,
+            mve=uncertainty == "mve",
+            evidential=uncertainty == "evidential",
         )
 
         # evaluate
-        train_rho, train_rmse, train_mae, train_r2 = evaluate_cnn(train_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "train", y_scaler, dropout=dropout)
-        test_rho, test_rmse, test_mae, test_r2 = evaluate_cnn(test_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "test", y_scaler, dropout=dropout)
+        train_rho, train_rmse, train_mae, train_r2 = evaluate_cnn(train_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "train", y_scaler, dropout=dropout,
+                                                                  mve=uncertainty == "mve", evidential=uncertainty == "evidential")
+        test_rho, test_rmse, test_mae, test_r2 = evaluate_cnn(test_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "test", y_scaler, dropout=dropout,
+                                                              mve=uncertainty == "mve", evidential=uncertainty == "evidential")
 
     print("done training and testing: dataset: {0} model: {1} split: {2} \n".format(dataset, model, split))
     print("full results saved at: ", EVAL_PATH)
@@ -376,6 +390,7 @@ def main(args):
             args.size,
             args.length,
             args.gpu,
+            args.regularizer_coeff,
         )
 
 

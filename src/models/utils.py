@@ -336,3 +336,11 @@ def activate_dropout(module: nn.Module, dropout_prob: float):
     if isinstance(module, nn.Dropout):
         module.p = dropout_prob
         module.train()
+
+
+def det_loss(y, y_pred, model):
+    # batch_size = y.shape[0]
+    reconstruction_error = F.mse_loss(y_pred, y, reduction="mean")
+    kl = model.accumulated_kl_div
+    model.reset_kl_div()
+    return reconstruction_error + kl, reconstruction_error, kl

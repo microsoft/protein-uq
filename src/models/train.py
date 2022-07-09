@@ -1,10 +1,11 @@
 import gpytorch
+import numpy as np
 import torch
 from scipy.stats import spearmanr
 from sklearn.metrics import mean_squared_error
 
 
-def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer, epoch_num, MODEL_PATH):
+def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer, epoch_num, MODEL_PATH, mve=False, evidential=False):
 
     patience = 3  # TODO: change patience back to 20 once done debugging
     p = 0
@@ -22,10 +23,15 @@ def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer,
             mask = mask.to(device).float()
         except UnboundLocalError:  # No masks for ESM mean embeddings
             mask = None
-        output = model(src, mask)
+        output = model(src, mask, evidential)
         if tgt.ndim == 1 and output.ndim == 2:
             tgt = tgt.unsqueeze(-1)  # unsqueeze targets for ESM mean ([batch_size] -> [batch_size, 1])
-        loss = criterion(output, tgt)
+        if mve:
+            loss = criterion(output[:, 0], output[:, 1], np.squeeze(tgt))
+        elif evidential:
+            loss = criterion(output[:, 0], output[:, 1], output[:, 2], output[:, 3], np.squeeze(tgt))
+        else:
+            loss = criterion(output, tgt)
         if train:
             optimizer.zero_grad()
             loss.backward()
@@ -69,8 +75,12 @@ def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer,
             print("epoch: %d loss: %.3f val loss: %.3f" % (e + 1, loss, val_rho))
 
         if not train:
-            val_rho = spearmanr(tgts, outputs).correlation
-            mse = mean_squared_error(tgts, outputs)
+            if mve or evidential:
+                val_rho = spearmanr(tgts, outputs[:, 0]).correlation
+                # mse = mean_squared_error(tgts, outputs[:, 0])
+            else:
+                val_rho = spearmanr(tgts, outputs).correlation
+                # mse = mean_squared_error(tgts, outputs)
 
         return i, val_rho
 

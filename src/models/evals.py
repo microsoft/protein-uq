@@ -101,7 +101,7 @@ def regression_eval(predicted, labels, SAVE_PATH):  # TODO: add uncertainty_eval
     return round(rho, 2), round(rmse, 2), round(mae, 2), round(r2, 2)
 
 
-def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=None, dropout=0.0):  # TOOD: write separate function to evaluate cnn ensemble (based on prediction files that were written out)
+def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=None, dropout=0.0, mve=False, evidential=False):  # TOOD: write separate function to evaluate cnn ensemble (based on prediction files that were written out)
     """run data through model and print eval stats"""
 
     calculate_std = False
@@ -123,7 +123,7 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=N
             mask = mask.to(device).float()
         except UnboundLocalError:  # No masks for ESM mean embeddings
             mask = None
-        output = model(src, mask)
+        output = model(src, mask, evidential)
         return output.detach().cpu(), tgt.detach().cpu()
 
     model = model.eval()
@@ -160,7 +160,20 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=N
     if dropout > 0:
         out = np.mean(out_list, axis=0)
         preds_std = np.std(out_list, axis=0)
+    elif mve:
+        preds_std = out[:, 1]
+        out = out[:, 0]
+    elif evidential:
+        lambdas = out[:, 1]  # also called nu or v
+        alphas = out[:, 2]
+        betas = out[:, 3]
+        out = out[:, 0]
 
+        aleatoric_unc_var = betas / (alphas - 1)
+        epistemic_unc_var = aleatoric_unc_var / lambdas
+
+        preds_std = np.sqrt(epistemic_unc_var + aleatoric_unc_var)
+       
     if y_scaler:
         if isinstance(y_scaler, tuple):
             labels = labels * y_scaler[1].numpy() + y_scaler[0].numpy()
