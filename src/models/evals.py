@@ -101,10 +101,10 @@ def regression_eval(predicted, labels, SAVE_PATH):  # TODO: add uncertainty_eval
     return round(rho, 2), round(rmse, 2), round(mae, 2), round(r2, 2)
 
 
-def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=None, dropout=0.0, mve=False, evidential=False):  # TOOD: write separate function to evaluate cnn ensemble (based on prediction files that were written out)
+def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=None, dropout=0.0, mve=False, evidential=False, svi=False):  # TOOD: write separate function to evaluate cnn ensemble (based on prediction files that were written out)
     """run data through model and print eval stats"""
 
-    calculate_std = False
+    calculate_std = True  # TODO: remove if not necessary
 
     model = model.to(device)
     bestmodel_save = MODEL_PATH / "bestmodel.tar"
@@ -133,9 +133,9 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=N
         def activate_dropout_(model):
             return activate_dropout(model, dropout)
         model.apply(activate_dropout_)
-        num_evals = 5
+    if dropout > 0 or svi:
+        num_evals = 10
         out_list = []
-        calculate_std = True
     else:
         num_evals = 1
 
@@ -154,10 +154,10 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=N
         out = torch.cat(outputs).numpy()
         labels = torch.cat(tgts).cpu().numpy()
 
-        if dropout > 0:
+        if dropout > 0 or svi:
             out_list.append(out)
 
-    if dropout > 0:
+    if dropout > 0 or svi:
         out = np.mean(out_list, axis=0)
         preds_std = np.std(out_list, axis=0)
     elif mve:
@@ -173,7 +173,7 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=N
         epistemic_unc_var = aleatoric_unc_var / lambdas
 
         preds_std = np.sqrt(epistemic_unc_var + aleatoric_unc_var)
-       
+
     if y_scaler:
         if isinstance(y_scaler, tuple):
             labels = labels * y_scaler[1].numpy() + y_scaler[0].numpy()

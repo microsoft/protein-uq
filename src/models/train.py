@@ -5,7 +5,7 @@ from scipy.stats import spearmanr
 from sklearn.metrics import mean_squared_error
 
 
-def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer, epoch_num, MODEL_PATH, mve=False, evidential=False):
+def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer, epoch_num, MODEL_PATH, mve=False, evidential=False, svi=False):
 
     patience = 3  # TODO: change patience back to 20 once done debugging
     p = 0
@@ -30,6 +30,8 @@ def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer,
             loss = criterion(output[:, 0], output[:, 1], np.squeeze(tgt))
         elif evidential:
             loss = criterion(output[:, 0], output[:, 1], output[:, 2], output[:, 3], np.squeeze(tgt))
+        elif svi:
+            loss = criterion(output.squeeze(), tgt.squeeze(), model)
         else:
             loss = criterion(output, tgt)
         if train:

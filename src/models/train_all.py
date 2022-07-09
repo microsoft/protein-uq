@@ -17,7 +17,7 @@ from evals import evaluate_cnn, evaluate_gp, evaluate_ridge
 from models import BayesianRidgeRegression, ExactGPModel, FluorescenceModel
 from train import train_cnn, train_gp, train_ridge
 from utils import (ASCollater, ESMSequenceMeanDataset, SequenceDataset,
-                   Tokenizer, evidential_loss, get_data, load_dataset, load_esm_dataset,
+                   Tokenizer, det_loss, evidential_loss, get_data, load_dataset, load_esm_dataset,
                    negative_log_likelihood, vocab)
 
 split_dict = {
@@ -248,11 +248,14 @@ def train_eval(
             )
         # initialize model (always use dropout = 0.0 for training)
         cnn_model = FluorescenceModel(len(vocab), kernel_size, input_size, 0.0, input_type=cnn_input_type,
-                                      mve=uncertainty == "mve", evidential=uncertainty == "evidential")
+                                      mve=uncertainty == "mve", evidential=uncertainty == "evidential",
+                                      svi=uncertainty == "svi", n_batches=1)  # TODO: fix n_batches
         if uncertainty == "mve":
             criterion = negative_log_likelihood
         elif uncertainty == "evidential":
             criterion = functools.partial(evidential_loss, lam=regularizer_coeff)
+        elif uncertainty == "svi":
+            criterion = det_loss
         else:
             criterion = nn.MSELoss()
         # create optimizer and loss function
@@ -287,13 +290,14 @@ def train_eval(
             EVAL_PATH,
             mve=uncertainty == "mve",
             evidential=uncertainty == "evidential",
+            svi=uncertainty == "svi",
         )
 
         # evaluate
         train_rho, train_rmse, train_mae, train_r2 = evaluate_cnn(train_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "train", y_scaler, dropout=dropout,
-                                                                  mve=uncertainty == "mve", evidential=uncertainty == "evidential")
+                                                                  mve=uncertainty == "mve", evidential=uncertainty == "evidential", svi=uncertainty == "svi")
         test_rho, test_rmse, test_mae, test_r2 = evaluate_cnn(test_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "test", y_scaler, dropout=dropout,
-                                                              mve=uncertainty == "mve", evidential=uncertainty == "evidential")
+                                                              mve=uncertainty == "mve", evidential=uncertainty == "evidential", svi=uncertainty == "svi")
 
     print("done training and testing: dataset: {0} model: {1} split: {2} \n".format(dataset, model, split))
     print("full results saved at: ", EVAL_PATH)
