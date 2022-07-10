@@ -181,8 +181,11 @@ def train_eval(
             lambda_2,
         )  # initialize model
         lr_trained, _ = train_ridge(train_seq, train_target, lr_model)  # train and pass back trained model
-        train_rho, train_rmse, train_mae, train_r2 = evaluate_ridge(train_seq, train_target, lr_trained, EVAL_PATH / "train", y_scaler)  # evaluate on train
-        test_rho, test_rmse, test_mae, test_r2 = evaluate_ridge(test_seq, test_target, lr_trained, EVAL_PATH / "test", y_scaler)  # evaluate on test
+        train_label_range = np.max(train_target) - np.min(train_target)
+        print("\nEvaluating model on train set...")
+        train_rho, train_rmse, train_mae, train_r2, train_unc_metrics = evaluate_ridge(train_seq, train_target, lr_trained, EVAL_PATH / "train", train_label_range, y_scaler)
+        print("\nEvaluating model on test set...")
+        test_rho, test_rmse, test_mae, test_r2, test_unc_metrics = evaluate_ridge(test_seq, test_target, lr_trained, EVAL_PATH / "test", train_label_range, y_scaler)
 
     if model == "gp":
         train_seq, train_target = torch.tensor(train_seq).float(), torch.tensor(train_target).float()
@@ -192,8 +195,11 @@ def train_eval(
         gp_model.covar_module.module.base_kernel.lengthscale *= length
         gp_trained, _ = train_gp(train_seq, train_target, gp_model, likelihood, device, length, size)
 
-        train_rho, train_rmse, train_mae, train_r2 = evaluate_gp(train_seq, train_target, gp_trained, likelihood, device, size, EVAL_PATH / "train", y_scaler)  # evaluate on train
-        test_rho, test_rmse, test_mae, test_r2 = evaluate_gp(test_seq, test_target, gp_trained, likelihood, device, size, EVAL_PATH / "test", y_scaler)  # evaluate on test
+        train_label_range = np.max(train_target.numpy()) - np.min(train_target.numpy())
+        print("\nEvaluating model on train set...")
+        train_rho, train_rmse, train_mae, train_r2, train_unc_metrics = evaluate_gp(train_seq, train_target, gp_trained, likelihood, device, size, EVAL_PATH / "train", train_label_range, y_scaler)
+        print("\nEvaluating model on test set...")
+        test_rho, test_rmse, test_mae, test_r2, test_unc_metrics = evaluate_gp(test_seq, test_target, gp_trained, likelihood, device, size, EVAL_PATH / "test", train_label_range, y_scaler)
 
     if model == "cnn":
         if representation == "ohe":
@@ -255,10 +261,10 @@ def train_eval(
         else:
             criterion = nn.MSELoss()
 
+        EVAL_PATH_BASE = EVAL_PATH
         ensemble_count = 1
         if args.uncertainty == "ensemble":
             ensemble_count = 5
-            EVAL_PATH_BASE = EVAL_PATH
             train_out_list = []
             test_out_list = []
 
@@ -329,8 +335,11 @@ def train_eval(
             test_out_std = test_preds_std
 
         # evaluate
-        train_rho, train_rmse, train_mae, train_r2 = evaluate_cnn(train_labels, train_out_mean, train_out_std, EVAL_PATH_BASE / "train")
-        test_rho, test_rmse, test_mae, test_r2 = evaluate_cnn(test_labels, test_out_mean, test_out_std, EVAL_PATH_BASE / "test")
+        train_label_range = np.max(train_labels) - np.min(train_labels)
+        print("\nEvaluating model on train set...")
+        train_rho, train_rmse, train_mae, train_r2, train_unc_metrics = evaluate_cnn(train_labels, train_out_mean, train_out_std, EVAL_PATH_BASE / "train", train_label_range)
+        print("\nEvaluating model on test set...")
+        test_rho, test_rmse, test_mae, test_r2, test_unc_metrics = evaluate_cnn(test_labels, test_out_mean, test_out_std, EVAL_PATH_BASE / "test", train_label_range)
 
     print("done training and testing: dataset: {0} model: {1} split: {2} \n".format(dataset, model, split))
     print("full results saved at: ", EVAL_PATH)

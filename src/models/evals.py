@@ -3,6 +3,7 @@ import pickle
 import gpytorch
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import seaborn as sns
 import torch
 from scipy import stats
@@ -79,7 +80,7 @@ def evaluate_log_likelihood(error, uncertainty):
     }
 
 
-def regression_eval(predicted, labels, SAVE_PATH):  # TODO: add uncertainty_eval fxn with stuff from main branch calculate_metrics fxn, add uncertainty plots, call uncetainty_eval below (3x)
+def regression_eval(predicted, labels, SAVE_PATH):
     """
     input: 1D tensor or array of predicted values and labels
     output: saves spearman, MSE, and graph of predicted vs actual
@@ -99,6 +100,56 @@ def regression_eval(predicted, labels, SAVE_PATH):  # TODO: add uncertainty_eval
     # plt.savefig(SAVE_PATH / 'preds_vs_labels.png', dpi = 300)
 
     return round(rho, 2), round(rmse, 2), round(mae, 2), round(r2, 2)
+
+
+def uncertainty_eval(preds_mean, labels, preds_std, SAVE_PATH, train_label_range):  # TODO: add uncertainty plots
+    """evaluate uncertainty predictions"""
+
+    residual = np.abs(labels - preds_mean)
+
+    df = pd.DataFrame()
+    df["labels"] = labels
+    df["preds_mean"] = preds_mean
+    df["residual"] = residual
+
+    coverage = residual < 2 * preds_std
+    width_range = 4 * preds_std / train_label_range
+    df["preds_std"] = preds_std
+    df["coverage"] = coverage
+    df["width/range"] = width_range
+    rho_unc, p_rho_unc = stats.spearmanr(df["residual"], df["preds_std"])
+    percent_coverage = sum(df["coverage"]) / len(df)
+    average_width_range = df["width/range"].mean() / train_label_range
+    miscalibration_area_results = evaluate_miscalibration_area(df["residual"], df["preds_std"])
+    miscalibration_area = miscalibration_area_results["miscalibration_area"]
+    ll_results = evaluate_log_likelihood(df["residual"], df["preds_std"])
+    average_log_likelihood = ll_results["average_log_likelihood"]
+    average_optimal_log_likelihood = ll_results["average_optimal_log_likelihood"]
+    print("RHO UNCERTAINTY: ", rho_unc)
+    print("RHO UNCERTAINTY P-VALUE: ", p_rho_unc)
+    print("PERCENT COVERAGE: ", percent_coverage)
+    print("AVERAGE WIDTH / TRAINING SET RANGE: ", average_width_range)
+    print("MISCALIBRATION AREA: ", miscalibration_area)
+    print("AVERAGE NLL: ", average_log_likelihood)
+    print("AVERAGE OPTIMAL NLL: ", average_optimal_log_likelihood)
+    print("NLL / NLL_OPT:", average_log_likelihood / average_optimal_log_likelihood)
+    metrics = [
+        rho_unc,
+        p_rho_unc,
+        percent_coverage,
+        average_width_range,
+        miscalibration_area,
+        average_log_likelihood,
+        average_optimal_log_likelihood,
+        average_log_likelihood / average_optimal_log_likelihood,
+    ]
+
+    df.to_csv(
+        SAVE_PATH / "preds.csv",
+        index=False,
+    )
+
+    return metrics
 
 
 def pred_cnn(data_iterator, model, device, MODEL_PATH, y_scaler=None, dropout=0.0, mve=False, evidential=False, svi=False):  # TOOD: write separate function to evaluate cnn ensemble (based on prediction files that were written out)
@@ -195,18 +246,19 @@ def pred_cnn(data_iterator, model, device, MODEL_PATH, y_scaler=None, dropout=0.
     return labels, out, preds_std
 
 
-def evaluate_cnn(labels, out, preds_std, SAVE_PATH):
+def evaluate_cnn(labels, out, preds_std, SAVE_PATH, train_label_range):
     """print eval stats"""
 
     SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already
     with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:
         pickle.dump((labels, out, preds_std), f)
     rho, rmse, mae, r2 = regression_eval(predicted=out, labels=labels, SAVE_PATH=SAVE_PATH)
+    metrics = uncertainty_eval(out.squeeze(), labels.squeeze(), preds_std.squeeze(), SAVE_PATH, train_label_range)
 
-    return rho, rmse, mae, r2
+    return rho, rmse, mae, r2, metrics
 
 
-def evaluate_ridge(X, y, model, SAVE_PATH, y_scaler=None):
+def evaluate_ridge(X, y, model, SAVE_PATH, train_label_range, y_scaler=None):
     preds_mean, preds_std = model.predict(X, return_std=True)
 
     if y_scaler:
@@ -218,11 +270,12 @@ def evaluate_ridge(X, y, model, SAVE_PATH, y_scaler=None):
     with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:
         pickle.dump((y, preds_mean, preds_std), f)
     rho, rmse, mae, r2 = regression_eval(predicted=preds_mean, labels=y, SAVE_PATH=SAVE_PATH)
+    metrics = uncertainty_eval(preds_mean.squeeze(), y.squeeze(), preds_std.squeeze(), SAVE_PATH, train_label_range)
 
-    return rho, rmse, mae, r2
+    return rho, rmse, mae, r2, metrics
 
 
-def evaluate_gp(X, y, model, likelihood, device, size, SAVE_PATH, y_scaler=None):
+def evaluate_gp(X, y, model, likelihood, device, size, SAVE_PATH, train_label_range, y_scaler=None):
     # Get into evaluation (predictive posterior) mode
     model.eval()
     likelihood.eval()
@@ -247,5 +300,6 @@ def evaluate_gp(X, y, model, likelihood, device, size, SAVE_PATH, y_scaler=None)
     with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:
         pickle.dump((y, preds_mean, preds_std), f)
     rho, rmse, mae, r2 = regression_eval(predicted=preds_mean, labels=y, SAVE_PATH=SAVE_PATH)
+    metrics = uncertainty_eval(preds_mean.squeeze(), y.squeeze(), preds_std.squeeze().numpy(), SAVE_PATH, train_label_range)
 
-    return rho, rmse, mae, r2
+    return rho, rmse, mae, r2, metrics
