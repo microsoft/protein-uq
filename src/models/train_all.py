@@ -13,7 +13,7 @@ import torch.optim as optim
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader, TensorDataset
 
-from evals import evaluate_cnn, evaluate_gp, evaluate_ridge
+from evals import evaluate_cnn, evaluate_gp, evaluate_ridge, pred_cnn
 from models import BayesianRidgeRegression, ExactGPModel, FluorescenceModel
 from train import train_cnn, train_gp, train_ridge
 from utils import (ASCollater, ESMSequenceMeanDataset, SequenceDataset,
@@ -246,10 +246,6 @@ def train_eval(
                 shuffle=True,
                 num_workers=4,
             )
-        # initialize model (always use dropout = 0.0 for training)
-        cnn_model = FluorescenceModel(len(vocab), kernel_size, input_size, 0.0, input_type=cnn_input_type,
-                                      mve=uncertainty == "mve", evidential=uncertainty == "evidential",
-                                      svi=uncertainty == "svi", n_batches=1)  # TODO: fix n_batches
         if uncertainty == "mve":
             criterion = negative_log_likelihood
         elif uncertainty == "evidential":
@@ -258,46 +254,83 @@ def train_eval(
             criterion = det_loss
         else:
             criterion = nn.MSELoss()
-        # create optimizer and loss function
-        optimizer = optim.Adam(
-            [
-                {
-                    "params": cnn_model.encoder.parameters(),
-                    "lr": 1e-3,
-                    "weight_decay": 0,
-                },
-                {
-                    "params": cnn_model.embedding.parameters(),
-                    "lr": 5e-5,
-                    "weight_decay": 0.05,
-                },
-                {
-                    "params": cnn_model.decoder.parameters(),
-                    "lr": 5e-6,
-                    "weight_decay": 0.05,
-                },
-            ]
-        )
-        # train and pass back epochs trained - for CNN, save model
-        epochs_trained = train_cnn(
-            train_iterator,
-            val_iterator,
-            cnn_model,
-            device,
-            criterion,
-            optimizer,
-            100,
-            EVAL_PATH,
-            mve=uncertainty == "mve",
-            evidential=uncertainty == "evidential",
-            svi=uncertainty == "svi",
-        )
+
+        ensemble_count = 1
+        if args.uncertainty == "ensemble":
+            ensemble_count = 5
+            EVAL_PATH_BASE = EVAL_PATH
+            train_out_list = []
+            test_out_list = []
+
+        for i in range(ensemble_count):
+            random.seed(i)
+            torch.manual_seed(i)
+            if args.uncertainty == "ensemble":
+                EVAL_PATH = EVAL_PATH_BASE / str(i)
+                EVAL_PATH.mkdir(parents=True, exist_ok=True)
+            # initialize model (always use dropout = 0.0 for training)
+            cnn_model = FluorescenceModel(len(vocab), kernel_size, input_size, 0.0, input_type=cnn_input_type,
+                                          mve=uncertainty == "mve", evidential=uncertainty == "evidential",
+                                          svi=uncertainty == "svi", n_batches=1)  # TODO: fix n_batches for SVI (not always 1)
+            # create optimizer and loss function
+            optimizer = optim.Adam(
+                [
+                    {
+                        "params": cnn_model.encoder.parameters(),
+                        "lr": 1e-3,
+                        "weight_decay": 0,
+                    },
+                    {
+                        "params": cnn_model.embedding.parameters(),
+                        "lr": 5e-5,
+                        "weight_decay": 0.05,
+                    },
+                    {
+                        "params": cnn_model.decoder.parameters(),
+                        "lr": 5e-6,
+                        "weight_decay": 0.05,
+                    },
+                ]
+            )
+            # train - for CNN, save model
+            train_cnn(
+                train_iterator,
+                val_iterator,
+                cnn_model,
+                device,
+                criterion,
+                optimizer,
+                100,
+                EVAL_PATH,
+                mve=uncertainty == "mve",
+                evidential=uncertainty == "evidential",
+                svi=uncertainty == "svi",
+            )
+
+            # evaluate
+            train_labels, train_out, train_preds_std = pred_cnn(train_iterator, cnn_model, device, EVAL_PATH, y_scaler, dropout=dropout,
+                                                                mve=uncertainty == "mve", evidential=uncertainty == "evidential", svi=uncertainty == "svi")
+            test_labels, test_out, test_preds_std = pred_cnn(test_iterator, cnn_model, device, EVAL_PATH, y_scaler, dropout=dropout,
+                                                             mve=uncertainty == "mve", evidential=uncertainty == "evidential", svi=uncertainty == "svi")
+
+            if args.uncertainty == "ensemble":
+                train_out_list.append(train_out)
+                test_out_list.append(test_out)
+
+        if args.uncertainty == "ensemble":
+            train_out_mean = np.mean(train_out_list, axis=0)
+            train_out_std = np.std(train_out_list, axis=0)
+            test_out_mean = np.mean(test_out_list, axis=0)
+            test_out_std = np.std(test_out_list, axis=0)
+        else:
+            train_out_mean = train_out
+            train_out_std = train_preds_std
+            test_out_mean = test_out
+            test_out_std = test_preds_std
 
         # evaluate
-        train_rho, train_rmse, train_mae, train_r2 = evaluate_cnn(train_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "train", y_scaler, dropout=dropout,
-                                                                  mve=uncertainty == "mve", evidential=uncertainty == "evidential", svi=uncertainty == "svi")
-        test_rho, test_rmse, test_mae, test_r2 = evaluate_cnn(test_iterator, cnn_model, device, EVAL_PATH, EVAL_PATH / "test", y_scaler, dropout=dropout,
-                                                              mve=uncertainty == "mve", evidential=uncertainty == "evidential", svi=uncertainty == "svi")
+        train_rho, train_rmse, train_mae, train_r2 = evaluate_cnn(train_labels, train_out_mean, train_out_std, EVAL_PATH_BASE / "train")
+        test_rho, test_rmse, test_mae, test_r2 = evaluate_cnn(test_labels, test_out_mean, test_out_std, EVAL_PATH_BASE / "test")
 
     print("done training and testing: dataset: {0} model: {1} split: {2} \n".format(dataset, model, split))
     print("full results saved at: ", EVAL_PATH)
@@ -334,68 +367,36 @@ def main(args):
 
     print("dataset: {0} model: {1} split: {2} \n".format(dataset, args.model, split))
 
-    if args.uncertainty == "ensemble":
-        for i in range(5):
-            random.seed(i)
-            torch.manual_seed(i)
-            train_eval(
-                dataset,
-                args.model,
-                args.representation,
-                args.uncertainty,
-                split,
-                device,
-                args.scale,
-                args.results_dir,
-                args.mean,
-                args.mut_mean,
-                args.batch_size,
-                args.flip,
-                args.kernel_size,
-                args.input_size,
-                args.dropout,
-                args.gb1_shorten,
-                args.max_iter,
-                args.tol,
-                args.alpha_1,
-                args.alpha_2,
-                args.lambda_1,
-                args.lambda_2,
-                args.size,
-                args.length,
-                args.gpu,
-            )  # TODO: call special CNN eval function for ensemble
-    else:
-        random.seed(0)
-        torch.manual_seed(0)
-        train_eval(
-            dataset,
-            args.model,
-            args.representation,
-            args.uncertainty,
-            split,
-            device,
-            args.scale,
-            args.results_dir,
-            args.mean,
-            args.mut_mean,
-            args.batch_size,
-            args.flip,
-            args.kernel_size,
-            args.input_size,
-            args.dropout,
-            args.gb1_shorten,
-            args.max_iter,
-            args.tol,
-            args.alpha_1,
-            args.alpha_2,
-            args.lambda_1,
-            args.lambda_2,
-            args.size,
-            args.length,
-            args.gpu,
-            args.regularizer_coeff,
-        )
+    random.seed(0)
+    torch.manual_seed(0)
+    train_eval(
+        dataset,
+        args.model,
+        args.representation,
+        args.uncertainty,
+        split,
+        device,
+        args.scale,
+        args.results_dir,
+        args.mean,
+        args.mut_mean,
+        args.batch_size,
+        args.flip,
+        args.kernel_size,
+        args.input_size,
+        args.dropout,
+        args.gb1_shorten,
+        args.max_iter,
+        args.tol,
+        args.alpha_1,
+        args.alpha_2,
+        args.lambda_1,
+        args.lambda_2,
+        args.size,
+        args.length,
+        args.gpu,
+        args.regularizer_coeff,
+    )
 
 
 if __name__ == "__main__":

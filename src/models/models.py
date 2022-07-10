@@ -157,7 +157,7 @@ class KL:
     accumulated_kl_div = 0
 
 
-class FluorescenceModel(nn.Module):  # TODO: refactor ensemble into this
+class FluorescenceModel(nn.Module):
     def __init__(self, n_tokens, kernel_size, input_size, dropout, input_type="ohe", mve=False, evidential=False, svi=False, n_batches=1):
         super(FluorescenceModel, self).__init__()
         self.kl_loss = KL

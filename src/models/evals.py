@@ -101,10 +101,10 @@ def regression_eval(predicted, labels, SAVE_PATH):  # TODO: add uncertainty_eval
     return round(rho, 2), round(rmse, 2), round(mae, 2), round(r2, 2)
 
 
-def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=None, dropout=0.0, mve=False, evidential=False, svi=False):  # TOOD: write separate function to evaluate cnn ensemble (based on prediction files that were written out)
-    """run data through model and print eval stats"""
+def pred_cnn(data_iterator, model, device, MODEL_PATH, y_scaler=None, dropout=0.0, mve=False, evidential=False, svi=False):  # TOOD: write separate function to evaluate cnn ensemble (based on prediction files that were written out)
+    """run data through model"""
 
-    calculate_std = True  # TODO: remove if not necessary
+    calculate_std = False
 
     model = model.to(device)
     bestmodel_save = MODEL_PATH / "bestmodel.tar"
@@ -127,6 +127,9 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=N
         return output.detach().cpu(), tgt.detach().cpu()
 
     model = model.eval()
+
+    if dropout > 0 or svi or mve or evidential:
+        calculate_std = True
 
     # Turn on dropout for inference to estimate uncertainty
     if dropout > 0:
@@ -185,6 +188,15 @@ def evaluate_cnn(data_iterator, model, device, MODEL_PATH, SAVE_PATH, y_scaler=N
             out = y_scaler.inverse_transform(out.reshape(-1, 1))
             if calculate_std:
                 preds_std = preds_std.reshape(-1, 1) * y_scaler.scale_
+
+    if not calculate_std:
+        preds_std = None
+
+    return labels, out, preds_std
+
+
+def evaluate_cnn(labels, out, preds_std, SAVE_PATH):
+    """print eval stats"""
 
     SAVE_PATH.mkdir(parents=True, exist_ok=True)  # make directory if it doesn't exist already
     with open(SAVE_PATH / "preds_labels_raw.pickle", "wb") as f:

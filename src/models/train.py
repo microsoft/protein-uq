@@ -88,7 +88,7 @@ def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer,
 
     nsteps = 0
     e = 0
-    bestmodel_save = MODEL_PATH / "bestmodel.tar"  # path to save best model  # TODO: make sure path reflects if multiple members of ensemble
+    bestmodel_save = MODEL_PATH / "bestmodel.tar"  # path to save best model
     for e in range(epoch_num):
         s, val_rho = epoch(model, train=True, current_step=nsteps)
         # print(val_rho)
@@ -107,10 +107,10 @@ def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer,
         if p == patience:
             print("MET PATIENCE")
             print("Finished training at epoch {0}".format(e))
-            return e
+            return
 
     print("Finished training CNN at epoch {0}".format(epoch_num))
-    return e
+    return
 
 
 def train_ridge(X_train, y_train, model):
