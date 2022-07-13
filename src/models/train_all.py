@@ -277,7 +277,7 @@ def train_eval(
             # initialize model (always use dropout = 0.0 for training)
             cnn_model = FluorescenceModel(len(vocab), kernel_size, input_size, 0.0, input_type=cnn_input_type,
                                           mve=uncertainty == "mve", evidential=uncertainty == "evidential",
-                                          svi=uncertainty == "svi", n_batches=1)  # TODO: fix n_batches for SVI (not always 1)
+                                          svi=uncertainty == "svi", n_batches=len(train_iterator))
             # create optimizer and loss function
             optimizer = optim.Adam(
                 [

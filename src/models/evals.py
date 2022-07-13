@@ -93,7 +93,7 @@ def regression_eval(predicted, labels, SAVE_PATH):
     mae = mean_absolute_error(labels, predicted)
     r2 = r2_score(labels, predicted)
 
-    # remove graphing - causes segmentation fault  # TODO: try to reenable plotting (include parities for train, validation, test + learning curves)
+    # remove graphing - causes segmentation fault  # TODO: reenable regression plotting (include parities for train, validation, test + learning curves)
     # plt.figure()
     # plt.title('predicted (y) vs. labels (x)')
     # sns.scatterplot(x = labels, y = predicted, s = 2, alpha = 0.2)
@@ -102,7 +102,7 @@ def regression_eval(predicted, labels, SAVE_PATH):
     return round(rho, 2), round(rmse, 2), round(mae, 2), round(r2, 2)
 
 
-def uncertainty_eval(preds_mean, labels, preds_std, SAVE_PATH, train_label_range):  # TODO: add uncertainty plots
+def uncertainty_eval(preds_mean, labels, preds_std, SAVE_PATH, train_label_range):  # TODO: add uncertainty plots (parity with error bars, miscalbration area, etc.)
     """evaluate uncertainty predictions"""
 
     residual = np.abs(labels - preds_mean)
