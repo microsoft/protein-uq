@@ -80,8 +80,12 @@ class MaskedConv1d(nn.Conv1d):
 
     def forward(self, x, input_mask=None):
         if input_mask is not None:
-            x = x * input_mask  # x has shape [batch_size, sequence_length, vocab_size] (e.g. [25, 265, 22] for gb1_1 OHE training)
-        return super().forward(x.transpose(1, 2)).transpose(1, 2)  # transpose because it expects [batch_size, vocab_size, sequence_length]
+            x = (
+                x * input_mask
+            )  # x has shape [batch_size, sequence_length, vocab_size] (e.g. [25, 265, 22] for gb1_1 OHE training)
+        return (
+            super().forward(x.transpose(1, 2)).transpose(1, 2)
+        )  # transpose because it expects [batch_size, vocab_size, sequence_length]
 
 
 class LengthMaxPool1D(nn.Module):
@@ -158,7 +162,9 @@ class KL:
 
 
 class FluorescenceModel(nn.Module):
-    def __init__(self, n_tokens, kernel_size, input_size, dropout, input_type="ohe", mve=False, evidential=False, svi=False, n_batches=1):
+    def __init__(
+        self, n_tokens, kernel_size, input_size, dropout, input_type="ohe", mve=False, evidential=False, svi=False, n_batches=1
+    ):
         super(FluorescenceModel, self).__init__()
         self.kl_loss = KL
         self.encoder = MaskedConv1d(n_tokens, input_size, kernel_size=kernel_size)

@@ -17,8 +17,9 @@ from evals import evaluate_cnn, evaluate_gp, evaluate_ridge, pred_cnn
 from models import BayesianRidgeRegression, ExactGPModel, FluorescenceModel
 from train import train_cnn, train_gp, train_ridge
 from utils import (ASCollater, ESMSequenceMeanDataset, SequenceDataset,
-                   Tokenizer, det_loss, evidential_loss, get_data, load_dataset, load_esm_dataset,
-                   negative_log_likelihood, vocab)
+                   Tokenizer, det_loss, evidential_loss, get_data,
+                   load_dataset, load_esm_dataset, negative_log_likelihood,
+                   vocab)
 
 split_dict = {
     "aav_1": "des_mut",
@@ -114,9 +115,7 @@ def train_eval(
     # load data
     if representation == "esm":
         if model == "cnn":
-            train, val, test, _ = load_esm_dataset(
-                dataset, model, split, mean, mut_mean, flip, gb1_shorten=gb1_shorten
-            )
+            train, val, test, _ = load_esm_dataset(dataset, model, split, mean, mut_mean, flip, gb1_shorten=gb1_shorten)
         else:
             train, _, test, max_length = load_esm_dataset(dataset, model, split, mean, mut_mean, flip, gb1_shorten=gb1_shorten)
             train_seq = np.array([i[0].numpy() for i in train]).squeeze()
@@ -183,13 +182,33 @@ def train_eval(
         lr_trained, _ = train_ridge(train_seq, train_target, lr_model)  # train and pass back trained model
         train_label_range = np.max(train_target) - np.min(train_target)
         print("\nEvaluating model on train set...")
-        train_rho, train_rmse, train_mae, train_r2, train_unc_metrics = evaluate_ridge(train_seq, train_target, lr_trained, EVAL_PATH / "train", train_label_range, y_scaler)
+        train_rho, train_rmse, train_mae, train_r2, train_unc_metrics = evaluate_ridge(
+            train_seq,
+            train_target,
+            lr_trained,
+            EVAL_PATH / "train",
+            train_label_range,
+            y_scaler,
+        )
         print("\nEvaluating model on test set...")
-        test_rho, test_rmse, test_mae, test_r2, test_unc_metrics = evaluate_ridge(test_seq, test_target, lr_trained, EVAL_PATH / "test", train_label_range, y_scaler)
+        test_rho, test_rmse, test_mae, test_r2, test_unc_metrics = evaluate_ridge(
+            test_seq,
+            test_target,
+            lr_trained,
+            EVAL_PATH / "test",
+            train_label_range,
+            y_scaler,
+        )
 
     if model == "gp":
-        train_seq, train_target = torch.tensor(train_seq).float(), torch.tensor(train_target).float()
-        test_seq, test_target = torch.tensor(test_seq).float(), torch.tensor(test_target).float()
+        train_seq, train_target = (
+            torch.tensor(train_seq).float(),
+            torch.tensor(train_target).float(),
+        )
+        test_seq, test_target = (
+            torch.tensor(test_seq).float(),
+            torch.tensor(test_target).float(),
+        )
         likelihood = gpytorch.likelihoods.GaussianLikelihood()
         gp_model = ExactGPModel(train_seq, train_target, likelihood, device_ids=gpu)
         gp_model.covar_module.module.base_kernel.lengthscale *= length
@@ -197,9 +216,29 @@ def train_eval(
 
         train_label_range = np.max(train_target.numpy()) - np.min(train_target.numpy())
         print("\nEvaluating model on train set...")
-        train_rho, train_rmse, train_mae, train_r2, train_unc_metrics = evaluate_gp(train_seq, train_target, gp_trained, likelihood, device, size, EVAL_PATH / "train", train_label_range, y_scaler)
+        train_rho, train_rmse, train_mae, train_r2, train_unc_metrics = evaluate_gp(
+            train_seq,
+            train_target,
+            gp_trained,
+            likelihood,
+            device,
+            size,
+            EVAL_PATH / "train",
+            train_label_range,
+            y_scaler,
+        )
         print("\nEvaluating model on test set...")
-        test_rho, test_rmse, test_mae, test_r2, test_unc_metrics = evaluate_gp(test_seq, test_target, gp_trained, likelihood, device, size, EVAL_PATH / "test", train_label_range, y_scaler)
+        test_rho, test_rmse, test_mae, test_r2, test_unc_metrics = evaluate_gp(
+            test_seq,
+            test_target,
+            gp_trained,
+            likelihood,
+            device,
+            size,
+            EVAL_PATH / "test",
+            train_label_range,
+            y_scaler,
+        )
 
     if model == "cnn":
         if representation == "ohe":
@@ -275,9 +314,17 @@ def train_eval(
                 EVAL_PATH = EVAL_PATH_BASE / str(i)
                 EVAL_PATH.mkdir(parents=True, exist_ok=True)
             # initialize model (always use dropout = 0.0 for training)
-            cnn_model = FluorescenceModel(len(vocab), kernel_size, input_size, 0.0, input_type=cnn_input_type,
-                                          mve=uncertainty == "mve", evidential=uncertainty == "evidential",
-                                          svi=uncertainty == "svi", n_batches=len(train_iterator))
+            cnn_model = FluorescenceModel(
+                len(vocab),
+                kernel_size,
+                input_size,
+                0.0,
+                input_type=cnn_input_type,
+                mve=uncertainty == "mve",
+                evidential=uncertainty == "evidential",
+                svi=uncertainty == "svi",
+                n_batches=len(train_iterator),
+            )
             # create optimizer and loss function
             optimizer = optim.Adam(
                 [
@@ -314,10 +361,28 @@ def train_eval(
             )
 
             # evaluate
-            train_labels, train_out, train_preds_std = pred_cnn(train_iterator, cnn_model, device, EVAL_PATH, y_scaler, dropout=dropout,
-                                                                mve=uncertainty == "mve", evidential=uncertainty == "evidential", svi=uncertainty == "svi")
-            test_labels, test_out, test_preds_std = pred_cnn(test_iterator, cnn_model, device, EVAL_PATH, y_scaler, dropout=dropout,
-                                                             mve=uncertainty == "mve", evidential=uncertainty == "evidential", svi=uncertainty == "svi")
+            train_labels, train_out, train_preds_std = pred_cnn(
+                train_iterator,
+                cnn_model,
+                device,
+                EVAL_PATH,
+                y_scaler,
+                dropout=dropout,
+                mve=uncertainty == "mve",
+                evidential=uncertainty == "evidential",
+                svi=uncertainty == "svi",
+            )
+            test_labels, test_out, test_preds_std = pred_cnn(
+                test_iterator,
+                cnn_model,
+                device,
+                EVAL_PATH,
+                y_scaler,
+                dropout=dropout,
+                mve=uncertainty == "mve",
+                evidential=uncertainty == "evidential",
+                svi=uncertainty == "svi",
+            )
 
             if args.uncertainty == "ensemble":
                 train_out_list.append(train_out)
@@ -337,16 +402,47 @@ def train_eval(
         # evaluate
         train_label_range = np.max(train_labels) - np.min(train_labels)
         print("\nEvaluating model on train set...")
-        train_rho, train_rmse, train_mae, train_r2, train_unc_metrics = evaluate_cnn(train_labels, train_out_mean, train_out_std, EVAL_PATH_BASE / "train", train_label_range)
+        train_rho, train_rmse, train_mae, train_r2, train_unc_metrics = evaluate_cnn(
+            train_labels,
+            train_out_mean,
+            train_out_std,
+            EVAL_PATH_BASE / "train",
+            train_label_range,
+        )
         print("\nEvaluating model on test set...")
-        test_rho, test_rmse, test_mae, test_r2, test_unc_metrics = evaluate_cnn(test_labels, test_out_mean, test_out_std, EVAL_PATH_BASE / "test", train_label_range)
+        test_rho, test_rmse, test_mae, test_r2, test_unc_metrics = evaluate_cnn(
+            test_labels,
+            test_out_mean,
+            test_out_std,
+            EVAL_PATH_BASE / "test",
+            train_label_range,
+        )
 
     print("done training and testing: dataset: {0} model: {1} split: {2} \n".format(dataset, model, split))
     print("full results saved at: ", EVAL_PATH)
     print(f"train stats: Spearman: {train_rho:.2f} RMSE: {train_rmse:.2f} MAE: {train_mae:.2f} R2: {train_r2:.2f}")
     print(f"test stats: Spearman: {test_rho:.2f} RMSE: {test_rmse:.2f} MAE: {test_mae:.2f} R2: {test_r2:.2f}")
 
-    # TODO: make sure all outputs in good format to read in for auto-generating plots
+    (
+        train_rho_unc,
+        train_p_rho_unc,
+        train_percent_coverage,
+        train_average_width_range,
+        train_miscalibration_area,
+        train_average_nll,
+        train_average_optimal_nll,
+        train_average_nll_ratio,
+    ) = train_unc_metrics
+    (
+        test_rho_unc,
+        test_p_rho_unc,
+        test_percent_coverage,
+        test_average_width_range,
+        test_miscalibration_area,
+        test_average_nll,
+        test_average_optimal_nll,
+        test_average_nll_ratio,
+    ) = test_unc_metrics
 
     with open(results_dir / (dataset + "_results.csv"), "a", newline="") as f:
         writer(f).writerow(
@@ -364,6 +460,22 @@ def train_eval(
                 test_rmse,
                 test_mae,
                 test_r2,
+                train_rho_unc,
+                train_p_rho_unc,
+                train_percent_coverage,
+                train_average_width_range,
+                train_miscalibration_area,
+                train_average_nll,
+                train_average_optimal_nll,
+                train_average_nll_ratio,
+                test_rho_unc,
+                test_p_rho_unc,
+                test_percent_coverage,
+                test_average_width_range,
+                test_miscalibration_area,
+                test_average_nll,
+                test_average_optimal_nll,
+                test_average_nll_ratio,
             ]
         )
 
@@ -421,4 +533,4 @@ if __name__ == "__main__":
     if (args.uncertainty != "dropout") and (args.dropout != 0.0):
         raise ValueError("Cannot use nonzero dropout with non-dropout uncertainty.")
 
-    main(args)  # TODO: remove X_ files, lint/format all files, make config files or "make" files
+    main(args)  # TODO: make config files / "make" files

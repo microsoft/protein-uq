@@ -1,13 +1,10 @@
 import pickle
 
 import gpytorch
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import torch
 from scipy import stats
-from scipy.stats import spearmanr
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 from utils import activate_dropout
@@ -102,7 +99,9 @@ def regression_eval(predicted, labels, SAVE_PATH):
     return round(rho, 2), round(rmse, 2), round(mae, 2), round(r2, 2)
 
 
-def uncertainty_eval(preds_mean, labels, preds_std, SAVE_PATH, train_label_range):  # TODO: add uncertainty plots (parity with error bars, miscalbration area, etc.)
+def uncertainty_eval(
+    preds_mean, labels, preds_std, SAVE_PATH, train_label_range
+):  # TODO: add uncertainty plots (parity with error bars, miscalbration area, etc.)
     """evaluate uncertainty predictions"""
 
     residual = np.abs(labels - preds_mean)
@@ -152,7 +151,9 @@ def uncertainty_eval(preds_mean, labels, preds_std, SAVE_PATH, train_label_range
     return metrics
 
 
-def pred_cnn(data_iterator, model, device, MODEL_PATH, y_scaler=None, dropout=0.0, mve=False, evidential=False, svi=False):  # TOOD: write separate function to evaluate cnn ensemble (based on prediction files that were written out)
+def pred_cnn(
+    data_iterator, model, device, MODEL_PATH, y_scaler=None, dropout=0.0, mve=False, evidential=False, svi=False
+):  # TOOD: write separate function to evaluate cnn ensemble (based on prediction files that were written out)
     """run data through model"""
 
     calculate_std = False
@@ -184,8 +185,10 @@ def pred_cnn(data_iterator, model, device, MODEL_PATH, y_scaler=None, dropout=0.
 
     # Turn on dropout for inference to estimate uncertainty
     if dropout > 0:
+
         def activate_dropout_(model):
             return activate_dropout(model, dropout)
+
         model.apply(activate_dropout_)
     if dropout > 0 or svi:
         num_evals = 10

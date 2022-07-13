@@ -2,12 +2,25 @@ import gpytorch
 import numpy as np
 import torch
 from scipy.stats import spearmanr
-from sklearn.metrics import mean_squared_error
+
+# from sklearn.metrics import mean_squared_error
 
 
-def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer, epoch_num, MODEL_PATH, mve=False, evidential=False, svi=False):
+def train_cnn(
+    train_iterator,
+    val_iterator,
+    model,
+    device,
+    criterion,
+    optimizer,
+    epoch_num,
+    MODEL_PATH,
+    mve=False,
+    evidential=False,
+    svi=False,
+):
 
-    patience = 3  # TODO: change patience back to 20 once done debugging
+    patience = 20
     p = 0
     best_rho = -1.1
     model = model.to(device)
@@ -44,13 +57,13 @@ def train_cnn(train_iterator, val_iterator, model, device, criterion, optimizer,
         if train:
             model = model.train()
             loader = train_iterator
-            t = "Training"
-            n_total = len(train_iterator)
+            # t = "Training"
+            # n_total = len(train_iterator)
         else:
             model = model.eval()
             loader = val_iterator
-            t = "Validating"
-            n_total = len(val_iterator)
+            # t = "Validating"
+            # n_total = len(val_iterator)
 
         losses = []
         outputs = []
