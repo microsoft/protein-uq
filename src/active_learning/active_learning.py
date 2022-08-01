@@ -291,7 +291,7 @@ if __name__ == '__main__':
                 args_other.metric = "mae" if args.metric == "rmse" else "rmse"
                 if args.confidence:
                     test_scores_other, _, _, _, _, test_single_scores_other, test_single_preds_other = evaluate_models(
-                        models, train_data, test_data, scaler, args_other, logger, export_std=True, export_single_model_preds=True)
+                        models, train_data, test_data, scaler, args_other, logger, export_std=True, export_single_model_preds=True) # TODO: replace this with part of train_all loop
                 else:
                     test_scores_other, _, _, _, test_single_scores_other, test_single_preds_other = evaluate_models(
                         models, train_data, test_data, scaler, args_other, logger, export_std=True, export_single_model_preds=True)
