@@ -1,16 +1,17 @@
 """Train a model using active learning on a dataset."""
-from copy import deepcopy
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-from pathlib import Path
-import shutil
-import time, datetime
-import os, sys
-import torch
-import re
+import argparse
+import datetime
+import os
 import random
+import re
+import sys
+import time
+from copy import deepcopy
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import torch
 
 sys.path.append("../models")
 from train_all import split_dict, train_eval
@@ -135,24 +136,23 @@ if __name__ == '__main__':
         args.gpu,
     )
 
-    results_root = Path(args.save_dir).parent #f"./al_results/{dataset}/{method}/"  # TODO: make good save dir
+    results_root = Path(args.save_dir).parent  # f"./al_results/{dataset}/{method}/"  # TODO: make good save dir
     Path(results_root).mkdir(parents=True, exist_ok=True)
-
 
     for i_trial in range(args.num_folds):
         df = pd.DataFrame(
             columns=["Trial", "Train Data Ratio", "Score", "Uncertainty", "Entropy"])
 
-        ### Load the data
+        # Load the data
         (all_train_data, val_data, test_data), features_scaler, scaler = \
             get_dataset_splits(args.data_path, args, logger)  # TODO: get dataset splits (move this out of train_all into utils or other file?)
 
-        ### Define active learning step variables and subsample the tasks
+        # Define active learning step variables and subsample the tasks
         n_total = len(all_train_data)
         n_sample = n_total
         n_loops = args.num_al_loops
 
-        ### Change active learning n_sample for early stopping
+        # Change active learning n_sample for early stopping
         if args.al_end_ratio is not None:
             if args.al_end_ratio > 1:
                 raise ValueError("Arg al_end_ratio must be less than train size")
@@ -164,15 +164,14 @@ if __name__ == '__main__':
 
         print(f"Ratio targets 0/1: {np.nanmean(np.array(all_train_data.targets(), dtype=np.float), axis=0)}")
 
-        ### Compute the number of samples to use at each step of active learning
+        # Compute the number of samples to use at each step of active learning
         if args.al_step_scale == "linear":
             n_samples_per_run = np.linspace(n_start, n_sample, n_loops)
         elif args.al_step_scale == "log":
             n_samples_per_run = np.logspace(np.log10(n_start), np.log10(n_sample), n_loops)
         n_samples_per_run = np.round(n_samples_per_run).astype(int)
 
-
-        ### SLG: Move this to outside strategy loop to sample the same initial
+        # SLG: Move this to outside strategy loop to sample the same initial
         # batch per strategy
         train_subset_inds_start = np.random.choice(n_total, n_start, replace=False)
         for strategy in args.al_strategy:  # TODO: okay to leave like this, but run in parallel rather than loop (separate job for each strategy instead of list of strategies)
@@ -180,19 +179,19 @@ if __name__ == '__main__':
 
             tic_time = time.time() # grab the current time for logging
 
-            ### Main active learning loop
+            # Main active learning loop
             for i in range(n_loops):
                 print(f"===> [{strategy}] Running trial {i_trial} with {n_samples_per_run[i]} samples")
 
                 train_data = all_train_data.sample_inds(train_subset_inds)
 
-                ### Train with the data subset, return the best models
+                # Train with the data subset, return the best models
                 models = run_training(
                     train_data, val_data, scaler, features_scaler, args, logger)  # TODO: replace this with part of train_all loop
 
-                ### Sample according to a strategy
+                # Sample according to a strategy
                 if "explorative" in strategy or "score" in strategy or "exploit" in strategy:
-                    ### Evaluate confidences on entire training set
+                    # Evaluate confidences on entire training set
                     all_train_data_unscaled = deepcopy(all_train_data)
                     if scaler is not None:
                         all_train_data_unscaled.set_targets(scaler.inverse_transform(all_train_data.targets()))
@@ -200,14 +199,14 @@ if __name__ == '__main__':
                     # Modified this line such that call with export_std flag, then grab the stds.
                     # will return: ensemble_scores, ensemble_predictions, confidence, std, entropy
                     all_train_scores, all_train_preds, _, all_train_std, all_train_entropy = evaluate_models(
-                        models, train_data, all_train_data_unscaled, scaler, args, logger, export_std=True) # TODO: replace this with part of train_all loop
+                        models, train_data, all_train_data_unscaled, scaler, args, logger, export_std=True)  # TODO: replace this with part of train_all loop
 
-                    ### Find the lowest confidence (highest unc) samples, add
+                    # Find the lowest confidence (highest unc) samples, add
                     # them to the training inds consider average entropy across
                     # tasks
                     sq_error = np.square(
                         np.array(all_train_data_unscaled.targets()) - all_train_preds)
-                    rmse = np.sqrt( np.mean(sq_error.astype(np.float32), axis=1) )  # TODO: replace with sklearn RMSE?
+                    rmse = np.sqrt(np.mean(sq_error.astype(np.float32), axis=1))  # TODO: replace with sklearn RMSE?
 
                     mean_uncertainty = np.mean(all_train_std, axis=1)
 
@@ -224,17 +223,17 @@ if __name__ == '__main__':
                             per_sample_weight *= -1
 
                         std_mult = args.al_std_mult
-                        if "_lcb" in strategy: # lower confidence bound
+                        if "_lcb" in strategy:  # lower confidence bound
                             per_sample_weight += -std_mult * mean_uncertainty
-                        elif "_ucb" in strategy: # upper confidence bound
+                        elif "_ucb" in strategy:  # upper confidence bound
                             per_sample_weight += +std_mult * mean_uncertainty
-                        elif "_ts" in strategy: # thompson sampling
+                        elif "_ts" in strategy:  # thompson sampling
                             per_sample_weight = np.random.normal(
                                 per_sample_weight, mean_uncertainty)
 
                         per_sample_weight -= per_sample_weight.min()
 
-                    ### Save all the smiles along with their uncertainties/errors
+                    # Save all the smiles along with their uncertainties/errors
                     train_subset_mask = np.zeros((n_total,))
                     train_subset_mask[train_subset_inds] = 1
                     df_scores = pd.DataFrame(data={
@@ -248,11 +247,11 @@ if __name__ == '__main__':
                     df_scores.to_csv(os.path.join(results_root, "tracks",
                         f"{strategy}_step_{i}_{tic_time}.csv"))
                 elif strategy == "random":
-                    per_sample_weight = np.ones((n_total,)) # uniform
+                    per_sample_weight = np.ones((n_total,))  # uniform
                 else:
                     raise ValueError(f"Unknown active learning strategy {strategy}")
 
-                ### Evaluate performance on test set and save
+                # Evaluate performance on test set and save
                 evals_results = evaluate_models(models, train_data, test_data,
                                                 scaler, args, logger,
                                                 export_std=True, export_single_model_preds=True)
@@ -262,8 +261,7 @@ if __name__ == '__main__':
                     test_scores, test_preds, test_conf, test_entropy, test_single_scores, test_single_preds = evals_results
                     test_std = test_conf = test_entropy = np.zeros_like(test_preds)
 
-
-                ### Compute the top-k percent acquired
+                # Compute the top-k percent acquired
                 # Grab the indicies that are in the top-k of only the training data
                 top_k_scores_in_pool = np.sort(
                                     np.mean(all_train_data.targets(), 1))
@@ -283,15 +281,13 @@ if __name__ == '__main__':
 
                 # Compute the percent overlap
                 percent_top_k_overlap = np.mean(selection_overlap) * 100
-                ###
 
-
-                ### Evaluate mae performance
+                # Evaluate mae performance
                 args_other = deepcopy(args)
                 args_other.metric = "mae" if args.metric == "rmse" else "rmse"
                 if args.confidence:
                     test_scores_other, _, _, _, _, test_single_scores_other, test_single_preds_other = evaluate_models(
-                        models, train_data, test_data, scaler, args_other, logger, export_std=True, export_single_model_preds=True) # TODO: replace this with part of train_all loop
+                        models, train_data, test_data, scaler, args_other, logger, export_std=True, export_single_model_preds=True)  # TODO: replace this with part of train_all loop
                 else:
                     test_scores_other, _, _, _, test_single_scores_other, test_single_preds_other = evaluate_models(
                         models, train_data, test_data, scaler, args_other, logger, export_std=True, export_single_model_preds=True)
@@ -302,11 +298,10 @@ if __name__ == '__main__':
                     test_scores_other = test_single_scores_other
                     test_preds_other = test_single_preds_other
 
-
                 df = df.append({
-                    'Train Data Ratio': n_samples_per_run[i]/float(n_total),
+                    'Train Data Ratio': n_samples_per_run[i] / float(n_total),
                     'Score': np.mean(test_scores),
-                    'Score_'+args_other.metric: np.mean(test_scores_other),
+                    f'Score_{args_other.metric}': np.mean(test_scores_other),
                     'Uncertainty': np.mean(test_conf),
                     'Standard Deviation': np.mean(test_std),
                     'Entropy': np.mean(test_entropy),
@@ -314,11 +309,10 @@ if __name__ == '__main__':
                     'Strategy': strategy,
                 }, ignore_index=True)
 
-
-                ### Save the complete test performance (including uncs) to log
+                # Save the complete test performance (including uncs) to log
                 test_error = test_preds - np.array(test_data.targets())
                 log_data_dict = {
-                    f"Error_{t}": test_error[:,t]
+                    f"Error_{t}": test_error[:, t]
                     for t in range(test_error.shape[1])}
 
                 log_data_dict.update({
@@ -327,7 +321,7 @@ if __name__ == '__main__':
                     "Entropy": np.mean(test_entropy, 1),
                     "Std": np.mean(test_std, 1),
                     "TopK": percent_top_k_overlap,
-                    "Train Data Ratio": n_samples_per_run[i]/float(n_total),
+                    "Train Data Ratio": n_samples_per_run[i] / float(n_total),
                 })
                 df_test_log = pd.DataFrame(data=log_data_dict)
                 Path(os.path.join(results_root, "scores")).mkdir(
@@ -337,9 +331,9 @@ if __name__ == '__main__':
 
                 logger.info("Percent top-k = {}".format(round(percent_top_k_overlap, 2)))
 
-                ### Add new samples to training set
-                n_add = n_samples_per_run[min(i+1, n_loops-1)] - n_samples_per_run[i]
-                if n_add > 0: # n_add = 0 on the last iteration, when we are done
+                # Add new samples to training set
+                n_add = n_samples_per_run[min(i + 1, n_loops - 1)] - n_samples_per_run[i]
+                if n_add > 0:  # n_add = 0 on the last iteration, when we are done
 
                     # Probability of sampling a new point, depends on the weight
                     per_sample_prob = deepcopy(per_sample_weight)
@@ -353,8 +347,8 @@ if __name__ == '__main__':
                         train_inds_to_add = np.random.choice(n_total, size=n_add, p=per_sample_prob, replace=False)
                     else:
                         # greedy, just pick the highest probability indicies
-                        inds_sorted = np.argsort(per_sample_prob) # smallest to largest
-                        train_inds_to_add = inds_sorted[-n_add:] # grab the last k inds
+                        inds_sorted = np.argsort(per_sample_prob)  # smallest to largest
+                        train_inds_to_add = inds_sorted[-n_add:]  # grab the last k inds
 
                     # Add the indices to the training set
                     train_subset_inds = np.append(train_subset_inds, train_inds_to_add)
