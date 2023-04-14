@@ -1,0 +1,27 @@
+name: protein-uq
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - pytorch=1.13.1
+  - torchvision=0.14.1 
+  - torchaudio=0.13.1 
+  - pytorch-cuda=11.7
+  - gpytorch
+  - seaborn
+  - numpy
+  - matplotlib
+  - scikit-learn
+  - scipy
+  - pandas=1.5
+  - pip
+  - nb_conda_kernels
+  - nb_conda
+  - pip:
+      - sequence-models
+      - fastaparser
+      - fair-esm
+      - tqdm
