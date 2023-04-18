@@ -1,0 +1,4 @@
+# Run these commands from the `src/models/` directory if using MIT Supercloud
+
+LLMapReduce --mapper=mapper_ohe.sh --input=inputs_ohe.txt --output=output_ohe --gpuNameCount=volta:1 --np [4,2,20] --keep=True
+LLMapReduce --mapper=mapper_esm.sh --input=inputs_esm.txt --output=output_esm --gpuNameCount=volta:1 --np [4,2,20] --keep=True

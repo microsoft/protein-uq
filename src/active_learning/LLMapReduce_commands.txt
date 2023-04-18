@@ -1,0 +1,5 @@
+# Run this command from the `src/active_learning/` directory if using MIT Supercloud
+
+LLMapReduce --mapper=mapper.sh --input=inputs.txt --output=output --gpuNameCount=volta:1 --np [4,2,20] --keep=True
+LLMapReduce --mapper=mapper.sh --input=inputs_bo.txt --output=output_bo --gpuNameCount=volta:1 --np [4,2,20] --keep=True
+LLMapReduce --mapper=mapper_single.sh --input=inputs_bo_single.txt --output=output_bo_single --gpuNameCount=volta:1 --np [4,2,20] --keep=True

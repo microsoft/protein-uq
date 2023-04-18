@@ -121,18 +121,8 @@ def create_parser():
         "--al_strategy",
         type=str,
         nargs="+",
-        choices=[
-            "random",  # *
-            "explorative_greedy",  # *
-            "explorative_sample",  # *
-            "score_greedy",
-            "score_sample",
-            "exploit",  # true greedy
-            "exploit_ucb",
-            "exploit_lcb",
-            "exploit_ts",
-        ],
-        default=["explorative_greedy"],
+        choices=["random"],
+        default=["random"],
         help="Strategy for active learning regime",
     )
     return parser
@@ -292,111 +282,6 @@ if __name__ == "__main__":
                     train_seq = all_train_seq[np.sort(train_subset_inds)]
                     train_target = all_train_target[np.sort(train_subset_inds)]
 
-                EVAL_PATH = results_root / strategy / str(i_trial) / str(i)
-                EVAL_PATH.mkdir(parents=True, exist_ok=True)
-
-                # Train with the data subset, return the best models
-                (
-                    lr_trained,
-                    gp_trained,
-                    EVAL_PATH_BASE,
-                    likelihood,
-                    train_seq,
-                    train_target,
-                    test_seq,
-                    test_target,
-                    train_labels,
-                    train_out_mean,
-                    train_out_std,
-                    test_labels,
-                    test_out_mean,
-                    test_out_std,
-                    al_full_train_out_mean,
-                    al_full_train_out_std,
-                ) = train_model(
-                    args.model,
-                    args.representation,
-                    dataset,
-                    args.uncertainty,
-                    EVAL_PATH,
-                    args.max_iter,
-                    args.tol,
-                    args.alpha_1,
-                    args.alpha_2,
-                    args.lambda_1,
-                    args.lambda_2,
-                    args.size,
-                    args.length,
-                    args.regularizer_coeff,
-                    args.kernel_size,
-                    args.dropout,
-                    args.gpu,
-                    device,
-                    scaler,
-                    args.batch_size,
-                    args.input_size,
-                    train_seq,
-                    train_target,
-                    test_seq,
-                    test_target,
-                    train_data,
-                    val_data,
-                    test_data,
-                    all_train_data,
-                )
-
-                (
-                    train_rho,
-                    train_rmse,
-                    train_mae,
-                    train_r2,
-                    train_unc_metrics,
-                    test_rho,
-                    test_rmse,
-                    test_mae,
-                    test_r2,
-                    test_unc_metrics,
-                ) = eval_model(
-                    args.model,
-                    scaler,
-                    train_seq=train_seq,
-                    train_target=train_target,
-                    test_seq=test_seq,
-                    test_target=test_target,
-                    lr_trained=lr_trained,
-                    gp_trained=gp_trained,
-                    EVAL_PATH=EVAL_PATH,
-                    EVAL_PATH_BASE=EVAL_PATH_BASE,
-                    likelihood=likelihood,
-                    device=device,
-                    size=args.size,
-                    train_labels=train_labels,
-                    train_out_mean=train_out_mean,
-                    train_out_std=train_out_std,
-                    test_labels=test_labels,
-                    test_out_mean=test_out_mean,
-                    test_out_std=test_out_std,
-                )
-                (
-                    train_rho_unc,
-                    train_p_rho_unc,
-                    train_percent_coverage,
-                    train_average_width_range,
-                    train_miscalibration_area,
-                    train_average_nll,
-                    train_average_optimal_nll,
-                    train_average_nll_ratio,
-                ) = train_unc_metrics
-                (
-                    test_rho_unc,
-                    test_p_rho_unc,
-                    test_percent_coverage,
-                    test_average_width_range,
-                    test_miscalibration_area,
-                    test_average_nll,
-                    test_average_optimal_nll,
-                    test_average_nll_ratio,
-                ) = test_unc_metrics
 
                 if args.model == "cnn" and args.representation == "ohe":
                     all_train_data_unscaled_targets = scaler.inverse_transform(
@@ -413,83 +298,8 @@ if __name__ == "__main__":
                         all_train_target.reshape(-1, 1)
                     )
 
-                all_train_preds = al_full_train_out_mean
-                mean_uncertainty = al_full_train_out_std.flatten()
-
                 # Sample according to a strategy
-                if (
-                    "explorative" in strategy
-                    or "score" in strategy
-                    or "exploit" in strategy
-                ):
-
-                    # Find the lowest confidence (highest unc) samples, add
-                    # them to the training inds consider average entropy across
-                    # tasks
-
-                    sq_error = np.square(
-                        np.array(all_train_data_unscaled_targets) - all_train_preds
-                    )
-                    rmse = np.sqrt(np.mean(sq_error.astype(np.float32), axis=1))
-
-                    if "explorative" in strategy:
-                        per_sample_weight = mean_uncertainty
-                    elif "score" in strategy:
-                        per_sample_weight = rmse
-                    elif "exploit" in strategy:
-                        if args.model == "cnn" and args.representation == "esm":
-                            scaled_preds = (
-                                all_train_preds - scaler[0].numpy()
-                            ) / scaler[1].numpy()
-                            scaled_preds = scaled_preds.reshape(-1, 1)
-                        else:
-                            scaled_preds = scaler.transform(all_train_preds.reshape(-1, 1))
-                        per_sample_weight = np.mean(scaled_preds, 1).astype(np.float32)
-
-                        # Reverse and make sure weights (preds) are positive
-                        if args.acquire_min:
-                            per_sample_weight *= -1
-
-                        std_mult = args.al_std_mult
-                        if args.model == "gp":
-                            mean_uncertainty = mean_uncertainty.numpy()
-                        if "_lcb" in strategy:  # lower confidence bound
-                            per_sample_weight += -std_mult * mean_uncertainty
-                        elif "_ucb" in strategy:  # upper confidence bound
-                            per_sample_weight += +std_mult * mean_uncertainty
-                        elif "_ts" in strategy:  # thompson sampling
-                            per_sample_weight = np.random.normal(
-                                per_sample_weight, mean_uncertainty
-                            )
-
-                        per_sample_weight -= per_sample_weight.min()
-
-                    # Save all the smiles along with their uncertainties/errors
-                    train_subset_mask = np.zeros((n_total,))
-                    train_subset_mask[train_subset_inds] = 1
-                    df_scores = pd.DataFrame(
-                        data={
-                            # "Smiles": all_train_data.smiles(),
-                            "Uncertainty": mean_uncertainty,
-                            "Error": rmse,
-                            "TrainInds": train_subset_mask,
-                        }
-                    )
-                    Path(os.path.join(results_root, strategy, "tracks")).mkdir(
-                        parents=True, exist_ok=True
-                    )
-                    df_scores.to_csv(
-                        os.path.join(
-                            results_root,
-                            strategy,
-                            "tracks",
-                            f"{strategy}_step_{i}_{tic_time}.csv",
-                        )
-                    )
-                elif strategy == "random":
-                    per_sample_weight = np.ones((n_total,))  # uniform
-                else:
-                    raise ValueError(f"Unknown active learning strategy {strategy}")
+                per_sample_weight = np.ones((n_total,))  # uniform
 
                 # Compute the top-k percent acquired
                 # Grab the indicies that are in the top-k of only the training data
@@ -542,15 +352,6 @@ if __name__ == "__main__":
                 else:
                     best_sample_aquired = top_k_scores_in_selection.max()
 
-                if args.model in ["cnn", "gp"]:
-                    mean_unc = test_out_std.mean().item()
-                elif args.model == "ridge":
-                    mean_unc = np.mean(test_out_std)
-
-                print(
-                    f"\nTest rho: {test_rho:.3f}, rmse: {test_rmse:.3f}, mae: {test_mae:.3f}, r2: {test_r2:.3f}, mean unc: {mean_unc:.3f}"
-                )
-
                 df = df.append(
                     {
                         "Strategy": strategy,
@@ -559,33 +360,33 @@ if __name__ == "__main__":
                             n_samples_per_run[i] / float(n_total), 3
                         ),
                         "TopKPercentOverlap": percent_top_k_overlap,
-                        "TestRho": test_rho,
-                        "TestRMSE": test_rmse,
-                        "TestMAE": test_mae,
-                        "TestR2": test_r2,
-                        "MeanUncertainty": round(mean_unc, 3),
-                        "train_rho_unc": round(train_rho_unc, 3),
-                        "train_p_rho_unc": round(train_p_rho_unc, 3),
-                        "train_percent_coverage": round(train_percent_coverage, 3),
+                        "TestRho": np.nan,
+                        "TestRMSE": np.nan,
+                        "TestMAE": np.nan,
+                        "TestR2": np.nan,
+                        "MeanUncertainty": round(np.nan, 3),
+                        "train_rho_unc": round(np.nan, 3),
+                        "train_p_rho_unc": round(np.nan, 3),
+                        "train_percent_coverage": round(np.nan, 3),
                         "train_average_width_range": round(
-                            train_average_width_range, 3
+                            np.nan, 3
                         ),
                         "train_miscalibration_area": round(
-                            train_miscalibration_area, 3
+                            np.nan, 3
                         ),
-                        "train_average_nll": round(train_average_nll, 3),
+                        "train_average_nll": round(np.nan, 3),
                         "train_average_optimal_nll": round(
-                            train_average_optimal_nll, 3
+                            np.nan, 3
                         ),
-                        "train_average_nll_ratio": round(train_average_nll_ratio, 3),
-                        "test_rho_unc": round(test_rho_unc, 3),
-                        "test_p_rho_unc": round(test_p_rho_unc, 3),
-                        "test_percent_coverage": round(test_percent_coverage, 3),
-                        "test_average_width_range": round(test_average_width_range, 3),
-                        "test_miscalibration_area": round(test_miscalibration_area, 3),
-                        "test_average_nll": round(test_average_nll, 3),
-                        "test_average_optimal_nll": round(test_average_optimal_nll, 3),
-                        "test_average_nll_ratio": round(test_average_nll_ratio, 3),
+                        "train_average_nll_ratio": round(np.nan, 3),
+                        "test_rho_unc": round(np.nan, 3),
+                        "test_p_rho_unc": round(np.nan, 3),
+                        "test_percent_coverage": round(np.nan, 3),
+                        "test_average_width_range": round(np.nan, 3),
+                        "test_miscalibration_area": round(np.nan, 3),
+                        "test_average_nll": round(np.nan, 3),
+                        "test_average_optimal_nll": round(np.nan, 3),
+                        "test_average_nll_ratio": round(np.nan, 3),
                         "best_sample_in_train": round(best_sample, 3),
                         "best_sample_acquired": round(best_sample_aquired, 3),
                     },
