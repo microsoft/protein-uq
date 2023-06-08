@@ -46,20 +46,22 @@ We used the [FLIP](https://github.com/J-SNACKKB/FLIP) repository to generate ESM
 The embeddings will be saved in the `FLIP/baselines/embeddings/` directory. Pre-computed embeddings for the AAV landscape can also be downloaded from [Zenodo](https://doi.org/10.5281/zenodo.6549368).
 
 ### Training and Evaluating Models with Uncertainty Quantification
-All training and inference for our models was done on the [MIT SuperCloud](https://supercloud.mit.edu/). We used this cluster's [LLMapReduce](https://supercloud.mit.edu/submitting-jobs#llmapreduce) command to make the most efficient use of resources using the cluster's scheduler and run our jobs in parallel. Original commands (run from `src/models/`):
+A list of commands to perform all training and inference for our models in series is provided in `src/models/train_all_commands_series.sh`. The following is an example command:
+
 ```
-LLMapReduce --mapper=mapper_ohe.sh --input=inputs_ohe.txt --output=output_ohe --gpuNameCount=volta:1 --np [4,2,20] --keep=True
-LLMapReduce --mapper=mapper_esm.sh --input=inputs_esm.txt --output=output_esm --gpuNameCount=volta:1 --np [4,2,20] --keep=True
+python train_all.py --split gb1_1 --model ridge --representation ohe --uncertainty ridge --dropout 0.0 --scale --seed 0
 ```
-An equivalent list of commands in series is provided in `src/models/train_all_commands_series.sh`.
+
+In practice, we used the [LLMapReduce](https://supercloud.mit.edu/submitting-jobs#llmapreduce) command on the [MIT SuperCloud](https://supercloud.mit.edu/) to make the most efficient use of resources using the cluster's scheduler and run our jobs in parallel. Original `LLMapReduce` commands are provided in `src/models/LLMapReduce_commands.txt`.
 
 ### Active Learning
-All active learning for our models was done on the [MIT SuperCloud](https://supercloud.mit.edu/). We used this cluster's [LLMapReduce](https://supercloud.mit.edu/submitting-jobs#llmapreduce) command to make the most efficient use of resources using the cluster's scheduler and run our jobs in parallel. Scripts for running the jobs in series are also provided. Original command (run from `src/active_learning/`):
+A list of commands to perform all of our active learning experiments is provided in `src/active_learning/active_learning_commands_series.sh`. The following is an example command:
+
 ```
-LLMapReduce --mapper=mapper.sh --input=inputs.txt --output=output --gpuNameCount=volta:1 --np [4,2,20] --keep=True
+python active_learning.py --split gb1_1 --model ridge --representation esm --uncertainty ridge --scale --num_folds 3 --al_strategy random --num_al_loops 5 --al_topk 100 --mean --dropout 0.0
 ```
 
-An equivalent list of commands in series is provided in `src/active_learning/active_learning_commands_series.sh`.
+In practice, we used the [LLMapReduce](https://supercloud.mit.edu/submitting-jobs#llmapreduce) command on the [MIT SuperCloud](https://supercloud.mit.edu/) to make the most efficient use of resources using the cluster's scheduler and run our jobs in parallel. Original `LLMapReduce` commands are provided in `src/active_learning/LLMapReduce_commands.txt`.
 
 ### Plotting Results
 The following notebooks provided in the `notebooks/` directory can be used to reproduce the figures and tables in the manuscript:
