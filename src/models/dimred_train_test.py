@@ -14,7 +14,7 @@ def create_parser():
     parser.add_argument('--n_neighbors', type=int, default=15, help='Number of neighbors')
     parser.add_argument('--perplexity', type=float, default=30.0, help='Perplexity')
     parser.add_argument('--min_dist', type=float, default=0.1, help='Minimum distance')
-    parser.add_argument('--metric', type=str, choices=['euclidean', 'manhattan', 'cosine', 'correlation'], default='euclidean', help='Distance metric')
+    parser.add_argument('--metric', type=str, choices=['euclidean', 'manhattan', 'cosine', 'correlation', 'jaccard'], default='euclidean', help='Distance metric')
     parser.add_argument('--n_jobs', type=int, default=1, help='Number of jobs')
     parser.add_argument('--random_state', type=int, default=42, help='Random state')
     return parser
