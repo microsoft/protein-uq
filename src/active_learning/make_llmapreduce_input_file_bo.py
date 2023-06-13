@@ -43,11 +43,17 @@ for representation in [
                     if uncertainty == "dropout":
                         for frac in [0.1, 0.2, 0.3, 0.4, 0.5]:
                             command_str = f"{i:03} {split} {model} {representation} {uncertainty} {sampling_strategy} {frac}"
-                            command_str_list.append(command_str)
+                            if model == "gp" and split.startswith("aav"):
+                                continue
+                            else:
+                                command_str_list.append(command_str)
                             i += 1
                     else:
                         command_str = f"{i:03} {split} {model} {representation} {uncertainty} {sampling_strategy} 0.0"
-                        command_str_list.append(command_str)
+                        if model == "gp" and split.startswith("aav"):
+                            continue
+                        else:
+                            command_str_list.append(command_str)
                         i += 1
 
 with open("inputs_bo.txt", "w") as f:
