@@ -162,11 +162,12 @@ if __name__ == "__main__":
     print("dataset: {0} model: {1} split: {2} \n".format(dataset, args.model, split))
 
     results_root = Path(
-        f"{args.results_dir}/{dataset}/{split}/{args.model}/{args.representation}/{args.uncertainty}"  # TODO: are models for different sampling strategies saved on top of each other?
+        f"{args.results_dir}/{dataset}/{split}/{args.model}/{args.representation}/{args.uncertainty}/{args.al_strategy}"
     )
     if args.uncertainty == "dropout":
         results_root = results_root / f"dropout{args.dropout}"
     results_root.mkdir(parents=True, exist_ok=True)
+    # TODO: (!!) are models for different sampling strategies saved on top of each other?
 
     for i_trial in range(args.num_folds):
         df = pd.DataFrame(
@@ -431,7 +432,13 @@ if __name__ == "__main__":
                     elif "score" in strategy:
                         per_sample_weight = rmse
                     elif "exploit" in strategy:
-                        scaled_preds = scaler.transform(all_train_preds)
+                        if args.model == "cnn" and args.representation == "esm":
+                            scaled_preds = (
+                                all_train_preds - scaler[0].numpy()
+                            ) / scaler[1].numpy()
+                            scaled_preds = scaled_preds.reshape(-1, 1)
+                        else:
+                            scaled_preds = scaler.transform(all_train_preds.reshape(-1, 1))
                         per_sample_weight = np.mean(scaled_preds, 1).astype(np.float32)
 
                         # Reverse and make sure weights (preds) are positive
@@ -439,6 +446,8 @@ if __name__ == "__main__":
                             per_sample_weight *= -1
 
                         std_mult = args.al_std_mult
+                        if args.model == "gp":
+                            mean_uncertainty = mean_uncertainty.numpy()
                         if "_lcb" in strategy:  # lower confidence bound
                             per_sample_weight += -std_mult * mean_uncertainty
                         elif "_ucb" in strategy:  # upper confidence bound
