@@ -162,12 +162,11 @@ if __name__ == "__main__":
     print("dataset: {0} model: {1} split: {2} \n".format(dataset, args.model, split))
 
     results_root = Path(
-        f"{args.results_dir}/{dataset}/{split}/{args.model}/{args.representation}/{args.uncertainty}/{args.al_strategy}"
+        f"{args.results_dir}/{dataset}/{split}/{args.model}/{args.representation}/{args.uncertainty}"
     )
     if args.uncertainty == "dropout":
         results_root = results_root / f"dropout{args.dropout}"
     results_root.mkdir(parents=True, exist_ok=True)
-    # TODO: (!!) are models for different sampling strategies saved on top of each other?
 
     for i_trial in range(args.num_folds):
         df = pd.DataFrame(
@@ -287,7 +286,7 @@ if __name__ == "__main__":
                     train_seq = all_train_seq[np.sort(train_subset_inds)]
                     train_target = all_train_target[np.sort(train_subset_inds)]
 
-                EVAL_PATH = results_root / str(i_trial) / str(i)
+                EVAL_PATH = results_root / strategy / str(i_trial) / str(i)
                 EVAL_PATH.mkdir(parents=True, exist_ok=True)
 
                 # Train with the data subset, return the best models
@@ -470,12 +469,13 @@ if __name__ == "__main__":
                             "TrainInds": train_subset_mask,
                         }
                     )
-                    Path(os.path.join(results_root, "tracks")).mkdir(
+                    Path(os.path.join(results_root, strategy, "tracks")).mkdir(
                         parents=True, exist_ok=True
                     )
                     df_scores.to_csv(
                         os.path.join(
                             results_root,
+                            strategy,
                             "tracks",
                             f"{strategy}_step_{i}_{tic_time}.csv",
                         )
