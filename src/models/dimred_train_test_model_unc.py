@@ -28,12 +28,10 @@ def create_parser():
     return parser
 
 
-if __name__ == "__main__":
-    parser = create_parser()
-    args = parser.parse_args()
-
-    split = split_dict[args.split]
-    dataset = re.findall(r"(\w*)\_", args.split)[0]
+def dimred_train_test_model_unc(split, representation, method, model, uncertainty, dropout, n_neighbors, perplexity, min_dist, metric, n_jobs, random_state):
+    split_orig = split
+    split = split_dict[split]
+    dataset = re.findall(r"(\w*)\_", split_orig)[0]
 
     # Load data
     (
@@ -48,78 +46,78 @@ if __name__ == "__main__":
         test_seq,
         test_target,
     ) = load_and_scale_data(
-        args.representation, "gp", dataset, split, True, False, False, False, True
+        representation, "gp", dataset, split, True, False, False, False, True
     )
 
     # Load results
-    results_dir = f"results/{dataset}/{split}/{args.model}/{args.representation}/{args.uncertainty}/cv_fold_0"
+    results_dir = f"results/{dataset}/{split}/{model}/{representation}/{uncertainty}/cv_fold_0"
     test_results_df = pd.read_csv(f"{results_dir}/test/preds.csv")
 
     test_uncertainty = test_results_df["preds_std"].values
 
     # Do dimensionality reduction
-    if args.method == "pca":
+    if method == "pca":
         from sklearn.decomposition import PCA
 
-        pca = PCA(n_components=2, random_state=args.random_state)
+        pca = PCA(n_components=2, random_state=random_state)
         X_test = pca.fit_transform(test_seq)
 
-    elif args.method == "umap":
+    elif method == "umap":
         import umap
 
         umap_ = umap.UMAP(
             n_components=2,
-            n_neighbors=args.n_neighbors,
-            min_dist=args.min_dist,
-            metric=args.metric,
-            random_state=args.random_state,
+            n_neighbors=n_neighbors,
+            min_dist=min_dist,
+            metric=metric,
+            random_state=random_state,
         )
         X_test = umap_.fit_transform(test_seq)
 
-    elif args.method == "tsne":
+    elif method == "tsne":
         from sklearn.manifold import TSNE
 
         tsne = TSNE(
             n_components=2,
-            perplexity=args.perplexity,
-            metric=args.metric,
-            random_state=args.random_state,
+            perplexity=perplexity,
+            metric=metric,
+            random_state=random_state,
         )
         X_test = tsne.fit_transform(test_seq)
 
-    elif args.method == "pca_tsne":
+    elif method == "pca_tsne":
         from sklearn.decomposition import PCA
         from sklearn.manifold import TSNE
 
-        pca = PCA(n_components=50, random_state=args.random_state)
+        pca = PCA(n_components=50, random_state=random_state)
         X_test = pca.fit_transform(test_seq)
 
         tsne = TSNE(
             n_components=2,
-            perplexity=args.perplexity,
-            metric=args.metric,
-            random_state=args.random_state,
+            perplexity=perplexity,
+            metric=metric,
+            random_state=random_state,
         )
         X_test = tsne.fit_transform(test_seq)
 
-    elif args.method == "umap_tsne":
+    elif method == "umap_tsne":
         import umap
         from sklearn.manifold import TSNE
 
         umap_ = umap.UMAP(
             n_components=50,
-            n_neighbors=args.n_neighbors,
-            min_dist=args.min_dist,
-            metric=args.metric,
-            random_state=args.random_state,
+            n_neighbors=n_neighbors,
+            min_dist=min_dist,
+            metric=metric,
+            random_state=random_state,
         )
         X_test = umap_.fit_transform(test_seq)
 
         tsne = TSNE(
             n_components=2,
-            perplexity=args.perplexity,
-            metric=args.metric,
-            random_state=args.random_state,
+            perplexity=perplexity,
+            metric=metric,
+            random_state=random_state,
         )
         X_test = tsne.fit_transform(test_seq)
 
@@ -128,6 +126,15 @@ if __name__ == "__main__":
     plt.xlabel("Reduced Dimension 1")
     plt.ylabel("Reduced Dimension 2")
     plt.colorbar(label="Uncertainty")
-    plt.title(f"{args.method} {dataset} {split} {args.representation} {args.model} {args.uncertainty}")
-    plt.savefig(f"dimred_unc/{args.method}_train_and_test_color_by_unc_{dataset}_{split}_{args.representation}_{args.model}_{args.uncertainty}.png")
+    plt.title(f"{method} {dataset} {split} {representation} {model} {uncertainty}")
+    plt.savefig(f"dimred_unc/{method}_train_and_test_color_by_unc_{dataset}_{split}_{representation}_{model}_{uncertainty}.pdf")
     plt.show()
+
+    return
+
+
+if __name__ == "__main__":
+    parser = create_parser()
+    args = parser.parse_args()
+
+    dimred_train_test_model_unc(args.split, args.representation, args.method, args.model, args.uncertainty, args.dropout, args.n_neighbors, args.perplexity, args.min_dist, args.metric, args.n_jobs, args.random_state)
