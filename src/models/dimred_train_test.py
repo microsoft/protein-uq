@@ -60,7 +60,7 @@ def dimred_train_test(split, representation, method, n_neighbors=15, perplexity=
             random_state=random_state,
         )
         X_train = umap_.fit_transform(train_seq)
-        X_test = umap_.transform(test_seq) 
+        X_test = umap_.transform(test_seq)
 
     elif method == "tsne":
         from sklearn.manifold import TSNE
@@ -114,11 +114,12 @@ def dimred_train_test(split, representation, method, n_neighbors=15, perplexity=
 
     # Make plots
     if "tsne" not in method:
-        plt.scatter(X_train[:, 0], X_train[:, 1], c='k', alpha=0.1)
-    plt.scatter(X_test[:, 0], X_test[:, 1], c='r', alpha=0.1)
+        plt.scatter(X_train[:, 0], X_train[:, 1], c='k', alpha=0.1, label="Train")
+    plt.scatter(X_test[:, 0], X_test[:, 1], c='r', alpha=0.1, label="Test")
     plt.xlabel("Reduced Dimension 1")
     plt.ylabel("Reduced Dimension 2")
     plt.title(f"{method} on {dataset} {split} {representation}")
+    plt.legend()
     plt.savefig(f"dimred/{method}_train_vs_test_{dataset}_{split}_{representation}.pdf")
     plt.clf()
 
