@@ -1,13 +1,13 @@
-import dimred_train_test
+from dimred_train_test import dimred_train_test
 
-for split in ['gb1_1', 'gb1_2', 'gb1_3', 'gb1_4']:
-    for representation in ['esm', 'ohe']:
-        for method in ['pca', 'umap', 'tsne', 'pca_tsne', 'umap_tsne']:
-            dimred_train_test.main(split, method)
-            print(f"Finished {split} {method}")
+# for method in ['pca', 'umap']:
+#     for split in ['gb1_1', 'gb1_2', 'gb1_3', 'gb1_4']:
+#         for representation in ['ohe', 'esm']:    
+#             dimred_train_test(split, representation, method)
+#             print(f"Finished {split} {representation} {method}")
 
-for split in ['meltome_1', 'aav_2', 'aav_5', 'aav_7']:
-    for representation in ['esm', 'ohe']:
-        for method in ['pca', 'umap']:
-            dimred_train_test.main(split, method)
-            print(f"Finished {split} {method}")
+for method in ['pca', 'umap']:
+    for split in ['aav_2', 'aav_5', 'aav_7', 'meltome_1']:
+        for representation in ['ohe', 'esm']:
+            dimred_train_test(split, representation, method)
+            print(f"Finished {split} {representation} {method}")

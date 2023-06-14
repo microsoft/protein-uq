@@ -20,7 +20,7 @@ def create_parser():
     return parser
 
 
-def dimred_train_test(split, representation, method, n_neighbors, perplexity, min_dist, metric, n_jobs, random_state):
+def dimred_train_test(split, representation, method, n_neighbors=15, perplexity=30.0, min_dist=0.1, metric='euclidean', n_jobs=1, random_state=42):
     split_orig = split
     split = split_dict[split]
     dataset = re.findall(r"(\w*)\_", split_orig)[0]
@@ -40,7 +40,7 @@ def dimred_train_test(split, representation, method, n_neighbors, perplexity, mi
     ) = load_and_scale_data(
         representation, "gp", dataset, split, True, False, False, False, True
     )
-
+ 
     # Do dimensionality reduction
     if method == "pca":
         from sklearn.decomposition import PCA
@@ -60,7 +60,7 @@ def dimred_train_test(split, representation, method, n_neighbors, perplexity, mi
             random_state=random_state,
         )
         X_train = umap_.fit_transform(train_seq)
-        X_test = umap_.transform(test_seq)
+        X_test = umap_.transform(test_seq) 
 
     elif method == "tsne":
         from sklearn.manifold import TSNE
@@ -120,7 +120,7 @@ def dimred_train_test(split, representation, method, n_neighbors, perplexity, mi
     plt.ylabel("Reduced Dimension 2")
     plt.title(f"{method} on {dataset} {split} {representation}")
     plt.savefig(f"dimred/{method}_train_vs_test_{dataset}_{split}_{representation}.pdf")
-    plt.show()
+    plt.clf()
 
     if "tsne" not in method:
         plt.scatter(X_train[:, 0], X_train[:, 1], c=train_target, cmap="viridis")
@@ -130,7 +130,7 @@ def dimred_train_test(split, representation, method, n_neighbors, perplexity, mi
     plt.colorbar(label="Target Value")
     plt.title(f"{method} on {dataset} {split} {representation}")
     plt.savefig(f"dimred/{method}_train_and_test_color_by_prop_{dataset}_{split}_{representation}.pdf")
-    plt.show()
+    plt.clf()
 
     return
 

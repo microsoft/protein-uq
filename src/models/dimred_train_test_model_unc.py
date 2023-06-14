@@ -28,7 +28,7 @@ def create_parser():
     return parser
 
 
-def dimred_train_test_model_unc(split, representation, method, model, uncertainty, dropout, n_neighbors, perplexity, min_dist, metric, n_jobs, random_state):
+def dimred_train_test_model_unc(split, representation, method, model, uncertainty, dropout=0.0, n_neighbors=15, perplexity=30.0, min_dist=0.1, metric='euclidean', n_jobs=1, random_state=42):
     split_orig = split
     split = split_dict[split]
     dataset = re.findall(r"(\w*)\_", split_orig)[0]
@@ -60,7 +60,8 @@ def dimred_train_test_model_unc(split, representation, method, model, uncertaint
         from sklearn.decomposition import PCA
 
         pca = PCA(n_components=2, random_state=random_state)
-        X_test = pca.fit_transform(test_seq)
+        X_train = pca.fit_transform(train_seq)
+        X_test = pca.transform(test_seq)
 
     elif method == "umap":
         import umap
@@ -72,7 +73,8 @@ def dimred_train_test_model_unc(split, representation, method, model, uncertaint
             metric=metric,
             random_state=random_state,
         )
-        X_test = umap_.fit_transform(test_seq)
+        X_train = umap_.fit_transform(train_seq)
+        X_test = umap_.transform(test_seq)
 
     elif method == "tsne":
         from sklearn.manifold import TSNE
@@ -122,13 +124,16 @@ def dimred_train_test_model_unc(split, representation, method, model, uncertaint
         X_test = tsne.fit_transform(test_seq)
 
     # Make plot
-    plt.scatter(X_test[:, 0], X_test[:, 1], c=test_uncertainty, cmap="viridis")
+    plt.scatter(X_test[:, 0], X_test[:, 1], c=test_uncertainty, cmap="viridis", label="Test")
+    # plt.scatter(X_train[:, 0], X_train[:, 1], c="white", marker=".", s=7, edgecolors="black", linewidths=0.1)
+    plt.scatter(X_train[:, 0], X_train[:, 1], c="red", marker="x", s=10, linewidths=0.5, label="Train")
     plt.xlabel("Reduced Dimension 1")
     plt.ylabel("Reduced Dimension 2")
     plt.colorbar(label="Uncertainty")
     plt.title(f"{method} {dataset} {split} {representation} {model} {uncertainty}")
-    plt.savefig(f"dimred_unc/{method}_train_and_test_color_by_unc_{dataset}_{split}_{representation}_{model}_{uncertainty}.pdf")
-    plt.show()
+    plt.legend()
+    plt.savefig(f"dimred_unc/{method}_{dataset}_{split}_{representation}_{model}_{uncertainty}.pdf")
+    plt.clf()
 
     return
 
