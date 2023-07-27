@@ -2,6 +2,7 @@ import argparse
 import re
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 
 from train_all import split_dict
 from utils import load_and_scale_data
@@ -53,6 +54,11 @@ def dimred_train_test_model_unc(split, representation, method, model, uncertaint
     results_dir = f"results/{dataset}/{split}/{model}/{representation}/{uncertainty}/cv_fold_0"
     test_results_df = pd.read_csv(f"{results_dir}/test/preds.csv")
 
+    # combine train and test
+    all_seq = np.concatenate((train_seq, test_seq))
+    all_target = np.concatenate((train_target, test_target))
+    print(split, all_seq.shape, all_target.shape)
+
     test_uncertainty = test_results_df["preds_std"].values
 
     # Do dimensionality reduction
@@ -60,8 +66,12 @@ def dimred_train_test_model_unc(split, representation, method, model, uncertaint
         from sklearn.decomposition import PCA
 
         pca = PCA(n_components=2, random_state=random_state)
-        X_train = pca.fit_transform(train_seq)
-        X_test = pca.transform(test_seq)
+        # X_train = pca.fit_transform(train_seq)
+        # X_test = pca.transform(test_seq)
+        X = pca.fit_transform(all_seq)
+        # print PCA explained variance
+        print(f"PCA explained variance ratio (2): {pca.explained_variance_ratio_}")
+        print(f"PCA explained variance ratio sum (2): {sum(pca.explained_variance_ratio_)}")
 
     elif method == "umap":
         import umap
@@ -73,8 +83,9 @@ def dimred_train_test_model_unc(split, representation, method, model, uncertaint
             metric=metric,
             random_state=random_state,
         )
-        X_train = umap_.fit_transform(train_seq)
-        X_test = umap_.transform(test_seq)
+        # X_train = umap_.fit_transform(train_seq)
+        # X_test = umap_.transform(test_seq)
+        X = umap_.fit_transform(all_seq)
 
     elif method == "tsne":
         from sklearn.manifold import TSNE
@@ -82,25 +93,34 @@ def dimred_train_test_model_unc(split, representation, method, model, uncertaint
         tsne = TSNE(
             n_components=2,
             perplexity=perplexity,
+            init='pca',
+            learning_rate='auto',
             metric=metric,
             random_state=random_state,
         )
-        X_test = tsne.fit_transform(test_seq)
+        # X_test = tsne.fit_transform(test_seq)
+        X = tsne.fit_transform(all_seq)
 
     elif method == "pca_tsne":
         from sklearn.decomposition import PCA
         from sklearn.manifold import TSNE
 
         pca = PCA(n_components=50, random_state=random_state)
-        X_test = pca.fit_transform(test_seq)
+        # X_test = pca.fit_transform(test_seq)
+        X = pca.fit_transform(all_seq)
+        print(f"PCA explained variance ratio (50): {pca.explained_variance_ratio_}")
+        print(f"PCA explained variance ratio sum (50): {sum(pca.explained_variance_ratio_)}")
 
         tsne = TSNE(
             n_components=2,
             perplexity=perplexity,
+            init='pca',
+            learning_rate='auto',
             metric=metric,
             random_state=random_state,
         )
-        X_test = tsne.fit_transform(test_seq)
+        # X_test = tsne.fit_transform(test_seq)
+        X = tsne.fit_transform(X)
 
     elif method == "umap_tsne":
         import umap
@@ -113,26 +133,49 @@ def dimred_train_test_model_unc(split, representation, method, model, uncertaint
             metric=metric,
             random_state=random_state,
         )
-        X_test = umap_.fit_transform(test_seq)
+        # X_test = umap_.fit_transform(test_seq)
+        X = umap_.fit_transform(all_seq)
 
         tsne = TSNE(
             n_components=2,
             perplexity=perplexity,
+            init='pca',
+            learning_rate='auto',
             metric=metric,
             random_state=random_state,
         )
-        X_test = tsne.fit_transform(test_seq)
+        # X_test = tsne.fit_transform(test_seq)
+        X = tsne.fit_transform(X)
 
     # Make plot
-    plt.scatter(X_test[:, 0], X_test[:, 1], c=test_uncertainty, cmap="viridis", label="Test")
-    # plt.scatter(X_train[:, 0], X_train[:, 1], c="white", marker=".", s=7, edgecolors="black", linewidths=0.1)
-    plt.scatter(X_train[:, 0], X_train[:, 1], c="red", marker="x", s=10, linewidths=0.5, label="Train")
+    # plt.scatter(X_test[:, 0], X_test[:, 1], c=test_uncertainty, cmap="viridis", label="Test")
+    # # plt.scatter(X_train[:, 0], X_train[:, 1], c="white", marker=".", s=7, edgecolors="black", linewidths=0.1)
+    # plt.scatter(X_train[:, 0], X_train[:, 1], c="red", marker="x", s=10, linewidths=0.5, label="Train")
+
+    # plt.scatter(X[len(train_target):, 0], X[len(train_target):, 1], c=test_uncertainty, cmap="viridis", label="Test")
+    # plt.scatter(X[:len(train_target), 0], X[:len(train_target), 1], c="red", marker="x", s=10, linewidths=0.5, label="Train")
+
+    if split == 'sampled':  # plot in reverse order because there are so many training points
+        plt.scatter(X[:len(train_target), 0], X[:len(train_target), 1], c="orange", s=10, label="Train")
+        test_plot = plt.scatter(X[len(train_target):, 0], X[len(train_target):, 1], c=test_uncertainty, s=10, cmap="Blues", label="Test")
+    else:
+        test_plot = plt.scatter(X[len(train_target):, 0], X[len(train_target):, 1], c=test_uncertainty, s=10, cmap="Blues", label="Test")
+        plt.scatter(X[:len(train_target), 0], X[:len(train_target), 1], c="orange", s=10, label="Train")
     plt.xlabel("Reduced Dimension 1")
     plt.ylabel("Reduced Dimension 2")
-    plt.colorbar(label="Uncertainty")
+    cb = plt.colorbar(test_plot, label="Uncertainty")
+    # hide colorbar tick labels
+    cb.set_ticks([])
+    cb.ax.tick_params(length=0)
+    # label ends of colorbar as 'min' and 'max'
+    cb.ax.text(1, 0, 'min', transform=cb.ax.transAxes, ha='left', va='center')
+    cb.ax.text(1, 1, 'max', transform=cb.ax.transAxes, ha='left', va='center')
     plt.title(f"{method} {dataset} {split} {representation} {model} {uncertainty}")
+    plt.grid(False)
+    plt.axis('off')
     plt.legend()
-    plt.savefig(f"dimred_unc/{method}_{dataset}_{split}_{representation}_{model}_{uncertainty}.pdf")
+    plt.savefig(f"dimred_unc/new_new_{method}_{dataset}_{split}_{representation}_{model}_{uncertainty}_{perplexity}.pdf")
+    cb.remove()
     plt.clf()
 
     return

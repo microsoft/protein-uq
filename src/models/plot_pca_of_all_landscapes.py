@@ -21,7 +21,7 @@ def create_parser():
     return parser
 
 
-def dimred_train_test(split, representation, method, n_neighbors=15, perplexity=30.0, min_dist=0.1, metric='euclidean', n_jobs=1, random_state=42):
+def dimred_all(split, representation, method, n_neighbors=15, perplexity=30.0, min_dist=0.1, metric='euclidean', n_jobs=1, random_state=42):
     split_orig = split
     split = split_dict[split]
     dataset = re.findall(r"(\w*)\_", split_orig)[0]
@@ -45,15 +45,19 @@ def dimred_train_test(split, representation, method, n_neighbors=15, perplexity=
     # combine train and test
     all_seq = np.concatenate((train_seq, test_seq))
     all_target = np.concatenate((train_target, test_target))
+    print(split, all_seq.shape, all_target.shape)
 
     # Do dimensionality reduction
     if method == "pca":
         from sklearn.decomposition import PCA
 
         pca = PCA(n_components=2, random_state=random_state)
-        X = pca.fit_transform(all_seq)
         # X_train = pca.fit_transform(train_seq)
         # X_test = pca.transform(test_seq)
+        X = pca.fit_transform(all_seq)
+        # print PCA explained variance
+        print(f"PCA explained variance ratio (2): {pca.explained_variance_ratio_}")
+        print(f"PCA explained variance ratio sum (2): {sum(pca.explained_variance_ratio_)}")
 
     elif method == "umap":
         import umap
@@ -65,9 +69,9 @@ def dimred_train_test(split, representation, method, n_neighbors=15, perplexity=
             metric=metric,
             random_state=random_state,
         )
-        X = umap_.fit_transform(all_seq)
         # X_train = umap_.fit_transform(train_seq)
         # X_test = umap_.transform(test_seq)
+        X = umap_.fit_transform(all_seq)
 
     elif method == "tsne":
         from sklearn.manifold import TSNE
@@ -75,10 +79,12 @@ def dimred_train_test(split, representation, method, n_neighbors=15, perplexity=
         tsne = TSNE(
             n_components=2,
             perplexity=perplexity,
+            init='pca',
+            learning_rate='auto',
             metric=metric,
             random_state=random_state,
         )
-        # t-SNE can't fit_transform on train and then transform on test
+        # X_test = tsne.fit_transform(test_seq)
         X = tsne.fit_transform(all_seq)
 
     elif method == "pca_tsne":
@@ -87,15 +93,19 @@ def dimred_train_test(split, representation, method, n_neighbors=15, perplexity=
 
         pca = PCA(n_components=50, random_state=random_state)
         # X_test = pca.fit_transform(test_seq)
-        X = pca.fit_tranform(all_seq)
+        X = pca.fit_transform(all_seq)
+        print(f"PCA explained variance ratio (50): {pca.explained_variance_ratio_}")
+        print(f"PCA explained variance ratio sum (50): {sum(pca.explained_variance_ratio_)}")
 
         tsne = TSNE(
             n_components=2,
             perplexity=perplexity,
+            init='pca',
+            learning_rate='auto',
             metric=metric,
             random_state=random_state,
         )
-        # t-SNE can't fit_transform on train and then transform on test
+        # X_test = tsne.fit_transform(test_seq)
         X = tsne.fit_transform(X)
 
     elif method == "umap_tsne":
@@ -115,43 +125,25 @@ def dimred_train_test(split, representation, method, n_neighbors=15, perplexity=
         tsne = TSNE(
             n_components=2,
             perplexity=perplexity,
+            init='pca',
+            learning_rate='auto',
             metric=metric,
             random_state=random_state,
         )
-        # t-SNE can't fit_transform on train and then transform on test
         # X_test = tsne.fit_transform(test_seq)
         X = tsne.fit_transform(X)
 
-    # Make plots
-
-    # if "tsne" not in method:
-    #     plt.scatter(X_train[:, 0], X_train[:, 1], c='k', alpha=0.1, label="Train")
-    # plt.scatter(X_test[:, 0], X_test[:, 1], c='r', alpha=0.1, label="Test")
-    plt.scatter(X[:len(train_target), 0], X[:len(train_target), 1], c='k', alpha=0.1, label="Train")
-    plt.scatter(X[len(train_target):, 0], X[len(train_target):, 1], c='r', alpha=0.1, label="Test")
+    plt.scatter(X[:, 0], X[:, 1], s=10, alpha=0.1)
     plt.xlabel("Reduced Dimension 1")
     plt.ylabel("Reduced Dimension 2")
-    plt.title(f"{method} on {dataset} {split} {representation}")
+    plt.title(f"{method} {dataset} {split} {representation}")
     plt.grid(False)
     plt.axis('off')
-    plt.legend()
-    plt.savefig(f"dimred/new_{method}_train_vs_test_{dataset}_{split}_{representation}.pdf")
+    plt.savefig(f"dimred_all/{method}_{dataset}_{split}_{representation}_{perplexity}.png")
     plt.clf()
 
-    # if "tsne" not in method:
-    #     plt.scatter(X_train[:, 0], X_train[:, 1], c=train_target, cmap="viridis")
-    # plt.scatter(X_test[:, 0], X_test[:, 1], c=test_target, cmap="viridis")
-    target_plot = plt.scatter(X[:, 0], X[:, 1], c=all_target, cmap="viridis")
-    plt.xlabel("Reduced Dimension 1")
-    plt.ylabel("Reduced Dimension 2")
-    cb = plt.colorbar(target_plot, label="Target Value")
-    cb.set_ticks(['min', 'max'])
-    plt.title(f"{method} on {dataset} {split} {representation}")
-    plt.grid(False)
-    plt.axis('off')
-    plt.savefig(f"dimred/new_{method}_train_and_test_color_by_prop_{dataset}_{split}_{representation}.pdf")
-    cb.remove()
-    plt.clf()
+    # save dimred embeddings
+    np.save(f"dimred_all/{method}_{dataset}_{split}_{representation}_{perplexity}.npy", X[:, :2])
 
     return
 
@@ -159,4 +151,5 @@ def dimred_train_test(split, representation, method, n_neighbors=15, perplexity=
 if __name__ == "__main__":
     parser = create_parser()
     args = parser.parse_args()
-    dimred_train_test(args.split, args.representation, args.method, args.n_neighbors, args.perplexity, args.min_dist, args.metric, args.n_jobs, args.random_state)
+
+    dimred_all(args.split, args.representation, args.method, args.n_neighbors, args.perplexity, args.min_dist, args.metric, args.n_jobs, args.random_state)
