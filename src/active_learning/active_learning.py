@@ -28,8 +28,7 @@ def ordered_list_diff(a, b):
     :param a: list or array to remove elements from
     :param b: list or array to find and remove
     """
-    list_diff = a[~np.in1d(a, b)]
-    return list_diff
+    return a[~np.in1d(a, b)]
 
 
 def create_parser():
@@ -110,8 +109,8 @@ def create_parser():
         "--al_step_scale",
         type=str,
         default="log",
-        choices=["log", "linear"],
-        help="scale of spacing for active learning steps (log or linear)",
+        choices=["log", "linear", "single"],
+        help="scale of spacing for active learning steps (log or linear). `Single` samples one additional point per step",
     )
     parser.add_argument(
         "--acquire_min",
@@ -128,7 +127,7 @@ def create_parser():
             "explorative_sample",  # *
             "score_greedy",
             "score_sample",
-            "exploit",
+            "exploit",  # true greedy
             "exploit_ucb",
             "exploit_lcb",
             "exploit_ts",
@@ -162,7 +161,7 @@ if __name__ == "__main__":
     print("dataset: {0} model: {1} split: {2} \n".format(dataset, args.model, split))
 
     results_root = Path(
-        f"{args.results_dir}/{dataset}/{split}/{args.model}/{args.representation}/{args.uncertainty}"  # TODO: are models for different sampling strategies saved on top of each other?
+        f"{args.results_dir}/{dataset}/{split}/{args.model}/{args.representation}/{args.uncertainty}"
     )
     if args.uncertainty == "dropout":
         results_root = results_root / f"dropout{args.dropout}"
@@ -196,6 +195,8 @@ if __name__ == "__main__":
                 "test_average_nll",
                 "test_average_optimal_nll",
                 "test_average_nll_ratio",
+                "best_sample_in_train",
+                "best_sample_aquired",
             ]
         )
 
@@ -256,6 +257,11 @@ if __name__ == "__main__":
             n_samples_per_run = np.logspace(
                 np.log10(n_start), np.log10(n_sample), n_loops
             )
+        elif args.al_step_scale == "single":
+            n_samples_per_run = range(n_start, n_sample)
+            print("Ignoring input for n_loops, using n_loops = n_sample - n_start")
+            n_loops = n_sample - n_start
+            thirty_percent_of_train = int(n_total * 0.3)
         n_samples_per_run = np.round(n_samples_per_run).astype(int)
 
         np.random.seed(i_trial)
@@ -286,7 +292,7 @@ if __name__ == "__main__":
                     train_seq = all_train_seq[np.sort(train_subset_inds)]
                     train_target = all_train_target[np.sort(train_subset_inds)]
 
-                EVAL_PATH = results_root / str(i_trial) / str(i)
+                EVAL_PATH = results_root / strategy / str(i_trial) / str(i)
                 EVAL_PATH.mkdir(parents=True, exist_ok=True)
 
                 # Train with the data subset, return the best models
@@ -431,7 +437,13 @@ if __name__ == "__main__":
                     elif "score" in strategy:
                         per_sample_weight = rmse
                     elif "exploit" in strategy:
-                        scaled_preds = scaler.transform(all_train_preds)
+                        if args.model == "cnn" and args.representation == "esm":
+                            scaled_preds = (
+                                all_train_preds - scaler[0].numpy()
+                            ) / scaler[1].numpy()
+                            scaled_preds = scaled_preds.reshape(-1, 1)
+                        else:
+                            scaled_preds = scaler.transform(all_train_preds.reshape(-1, 1))
                         per_sample_weight = np.mean(scaled_preds, 1).astype(np.float32)
 
                         # Reverse and make sure weights (preds) are positive
@@ -439,6 +451,8 @@ if __name__ == "__main__":
                             per_sample_weight *= -1
 
                         std_mult = args.al_std_mult
+                        if args.model == "gp":
+                            mean_uncertainty = mean_uncertainty.numpy()
                         if "_lcb" in strategy:  # lower confidence bound
                             per_sample_weight += -std_mult * mean_uncertainty
                         elif "_ucb" in strategy:  # upper confidence bound
@@ -461,12 +475,13 @@ if __name__ == "__main__":
                             "TrainInds": train_subset_mask,
                         }
                     )
-                    Path(os.path.join(results_root, "tracks")).mkdir(
+                    Path(os.path.join(results_root, strategy, "tracks")).mkdir(
                         parents=True, exist_ok=True
                     )
                     df_scores.to_csv(
                         os.path.join(
                             results_root,
+                            strategy,
                             "tracks",
                             f"{strategy}_step_{i}_{tic_time}.csv",
                         )
@@ -516,7 +531,18 @@ if __name__ == "__main__":
                 # Compute the percent overlap
                 percent_top_k_overlap = np.mean(selection_overlap) * 100
 
-                if args.model == "cnn" or args.model == "gp":
+                # find best sample in all training data
+                if args.acquire_min:
+                    best_sample = top_k_scores_in_pool.min()
+                else:
+                    best_sample = top_k_scores_in_pool.max()
+
+                if args.acquire_min:
+                    best_sample_aquired = top_k_scores_in_selection.min()
+                else:
+                    best_sample_aquired = top_k_scores_in_selection.max()
+
+                if args.model in ["cnn", "gp"]:
                     mean_unc = test_out_std.mean().item()
                 elif args.model == "ridge":
                     mean_unc = np.mean(test_out_std)
@@ -560,11 +586,13 @@ if __name__ == "__main__":
                         "test_average_nll": round(test_average_nll, 3),
                         "test_average_optimal_nll": round(test_average_optimal_nll, 3),
                         "test_average_nll_ratio": round(test_average_nll_ratio, 3),
+                        "best_sample_in_train": round(best_sample, 3),
+                        "best_sample_aquired": round(best_sample_aquired, 3),
                     },
                     ignore_index=True,
                 )
 
-                print("Percent top-k = {}".format(round(percent_top_k_overlap, 2)))
+                print(f"Percent top-k = {round(percent_top_k_overlap, 2)}")
 
                 # Add new samples to training set
                 n_add = (
@@ -593,6 +621,14 @@ if __name__ == "__main__":
                     train_subset_inds = np.append(train_subset_inds, train_inds_to_add)
 
                 torch.cuda.empty_cache()
+
+                # End AL loop if we've acquired the best sample or if we've reached 30% of the training data
+                if args.al_step_scale == "single" and (best_sample_aquired == best_sample):
+                    print("Acquired best sample, ending fold early")
+                    break
+                elif args.al_step_scale == "single" and (len(train_subset_inds) >= thirty_percent_of_train):
+                    print("Acquired 30% of training data, ending fold early")
+                    break
 
         # END SINGLE FOLD
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S.%f")

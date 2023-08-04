@@ -1,0 +1,10 @@
+with open("inputs_bo.txt", "r") as f:
+    lines = f.readlines()
+
+lines = [line.split() for line in lines]
+
+full_commands = [f"python active_learning.py --split {line[1]} --model {line[2]} --representation {line[3]} --uncertainty {line[4]} --scale --num_folds 3 --al_strategy {line[5]} --num_al_loops 5 --al_topk 100 --mean --dropout {line[6]}" for line in lines]
+
+with open("bo_commands_series.sh", "w") as f:
+    for line in full_commands:
+        f.write(line + "\n")
