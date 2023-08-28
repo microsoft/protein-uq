@@ -587,7 +587,7 @@ if __name__ == "__main__":
                         "test_average_optimal_nll": round(test_average_optimal_nll, 3),
                         "test_average_nll_ratio": round(test_average_nll_ratio, 3),
                         "best_sample_in_train": round(best_sample, 3),
-                        "best_sample_aquired": round(best_sample_aquired, 3),
+                        "best_sample_acquired": round(best_sample_aquired, 3),
                     },
                     ignore_index=True,
                 )
