@@ -608,7 +608,7 @@ if __name__ == "__main__":
                     per_sample_prob = per_sample_prob / per_sample_prob.sum()
 
                     # Sample accordingly and add to our training inds
-                    if "sample" in strategy:
+                    if "sample" in strategy or strategy == "random":
                         train_inds_to_add = np.random.choice(
                             n_total, size=n_add, p=per_sample_prob, replace=False
                         )
