@@ -1,0 +1,8 @@
+python bo_random.py --split gb1_4 --model gp --representation esm --uncertainty gp --scale --num_folds 3 --al_strategy random --al_step_scale log --num_al_loops 5 --al_topk 100 --mean
+python bo_random.py --split gb1_4 --model cnn --representation esm --uncertainty ensemble --scale --num_folds 3 --al_strategy random --al_step_scale log --num_al_loops 5 --al_topk 100 --mean
+python bo_random.py --split gb1_4 --model cnn --representation esm --uncertainty evidential --scale --num_folds 3 --al_strategy random --al_step_scale log --num_al_loops 5 --al_topk 100 --mean
+python bo_random.py --split meltome_1 --model gp --representation esm --uncertainty gp --scale --num_folds 3 --al_strategy random --al_step_scale log --num_al_loops 5 --al_topk 100 --mean
+python bo_random.py --split meltome_1 --model cnn --representation esm --uncertainty ensemble --scale --num_folds 3 --al_strategy random --al_step_scale log --num_al_loops 5 --al_topk 100 --mean
+python bo_random.py --split meltome_1 --model cnn --representation esm --uncertainty evidential --scale --num_folds 3 --al_strategy random --al_step_scale log --num_al_loops 5 --al_topk 100 --mean
+python bo_random.py --split aav_7 --model cnn --representation esm --uncertainty ensemble --scale --num_folds 3 --al_strategy random --al_step_scale log --num_al_loops 5 --al_topk 100 --mean
+python bo_random.py --split aav_7 --model cnn --representation esm --uncertainty evidential --scale --num_folds 3 --al_strategy random --al_step_scale log --num_al_loops 5 --al_topk 100 --mean
